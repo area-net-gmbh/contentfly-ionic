@@ -1,0 +1,36 @@
+{
+  "name": "appcms-ionic-sdk",
+  "version": "0.0.12",
+  "description": "Ionic SDK for Ionic",
+  "main": "./dist/index.js",
+  "typings": "./dist/index.d.ts",
+  "files": "dist",
+  "scripts": {
+    "ngc": "ngc",
+    "build": "rm -rf aot dist && npm run ngc",
+    "publishPackage": "npm run build && npm publish"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/area-net-gmbh/appcms-ionic.git"
+  },
+  "keywords": [],
+  "author": "AREA-NET GmbH",
+  "license": "AGPL",
+  "bugs": {
+    "url": "https://github.com/area-net-gmbh/appcms-ionic/issues"
+  },
+  "homepage": "https://github.com/area-net-gmbh/appcms-ionic#readme",
+  "devDependencies": {
+    "@angular/common": "^4.0.0",
+    "@angular/compiler": "^4.0.0",
+    "@angular/compiler-cli": "^4.0.0",
+    "@angular/core": "^4.0.0",
+    "@angular/platform-browser": "^4.0.0",
+    "@angular/platform-browser-dynamic": "^4.0.0",
+    "@types/node": "^6.0.60",
+    "zone.js": "^0.8.4",
+    "rxjs": "^5.4.0",
+    "typescript": "^2.3.4"
+  }
+}
