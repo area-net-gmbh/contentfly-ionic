@@ -1,6 +1,6 @@
 {
   "name": "appcms-ionic-sdk",
-  "version": "0.0.12",
+  "version": "0.1.15",
   "description": "Ionic SDK for Ionic",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
