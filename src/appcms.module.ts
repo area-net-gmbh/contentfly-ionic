@@ -1,6 +1,14 @@
-import { Observable } from 'rxjs';
-import { NgModule, ModuleWithProviders } from '@angular/core';
-import {AppcmSDK} from "./providers/appcm-sdk";
+import {NgModule, ModuleWithProviders, InjectionToken} from '@angular/core';
+import {AppcmSdk} from "./appcm-sdk";
+import {Api} from "./classes/api";
+import {User} from "./classes/user";
+import {ApiConfig} from "./classes/api.config";
+import {Store} from "./classes/store";
+import {Schema} from "./classes/schema";
+import {SyncState} from "./classes/syncstate";
+import {Logger} from "./classes/logger";
+
+export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
 @NgModule({
     declarations: [
@@ -8,13 +16,25 @@ import {AppcmSDK} from "./providers/appcm-sdk";
     ],
     exports: [
 
+    ],
+    imports: [
+
     ]
 })
 export class AppcmsModule {
-    static forRoot(): ModuleWithProviders {
+    static forRoot(config: ApiConfig): ModuleWithProviders {
         return {
             ngModule: AppcmsModule,
-            providers: [ AppcmSDK ]
+            providers: [
+              {provide: API_CONFIG, useValue: config},
+              AppcmSdk,
+              Api,
+              Store,
+              SyncState,
+              User,
+              Schema,
+              Logger
+            ]
         };
     }
 }
