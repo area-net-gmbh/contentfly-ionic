@@ -3,7 +3,7 @@ import {Inject, Injectable} from "@angular/core";
 import {HttpClient, HttpHeaders} from "@angular/common/http";
 import {User} from "./user";
 import {ApiResponse} from "./api-response.interface";
-import {API_CONFIG} from "../appcms.module";
+import {API_CONFIG} from "../contentfly.module";
 import {ApiConfig} from "./api.config";
 
 @Injectable()
