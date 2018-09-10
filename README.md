@@ -8,11 +8,7 @@
 
 - **CMS**: https://github.com/area-net-gmbh/contentfly-cms
 - **Ionic SDK**: https://github.com/area-net-gmbh/contentfly-ionic
-
-## Tools und mehr
-
-- Vagrant-Umgebung für Server: https://github.com/area-net-gmbh/contentfly-vagrant
-- Download + Dokumentation: https://www.contentfly-cms.de
+- **Dokumentation**: https://www.contentfly-cms.de
 
 ## Einführung
 
@@ -31,7 +27,37 @@ Für die Entwicklung von Apps mit dem Contentfly Framework sind folgende Kenntni
 
 # Ionic SDK
 
-Das Ionic SDK befindet sich derzeit noch in Entwicklung...
+## Installation
+
+**Installation per NPM**
+`npm install contentfly-ionic`
+
+**src/app/app.module.ts**
+```
+...
+import {ContentflyModule} from "contentfly-ionic";
+
+@NgModule({
+  declarations: [
+    ...
+  ],
+  imports: [
+    ...
+    ContentflyModule.forRoot({
+      baseUrl: 'https://url.zum-contentfly-cms.de/'
+    })
+  ],
+  bootstrap: [IonicApp],
+  entryComponents: [
+    MyApp
+  ],
+  providers: [
+    ...
+  ]
+})
+export class AppModule {}
+
+```
 
 # Lizenz
 

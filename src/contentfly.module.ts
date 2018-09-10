@@ -9,6 +9,7 @@ import {Logger} from "./helper/logger";
 import {ContentflySdk} from "./contentfly-sdk";
 import {Uploader} from "./sync/uploader";
 import {Service} from "./sync/service";
+import {SQLite} from "@ionic-native/sqlite";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -37,7 +38,8 @@ export class ContentflyModule {
               Schema,
               Logger,
               Uploader,
-              Service
+              Service,
+              SQLite
             ]
         };
     }
