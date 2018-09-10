@@ -403,7 +403,7 @@ export class Store {
           observer.next();
         }
 
-        return db.sqlBatch(batchStatements):
+        return db.sqlBatch(batchStatements);
 
       }).then(() => {
         observer.complete();
@@ -870,8 +870,10 @@ export class Store {
     let promises  = [];
     let db        = null;
 
-    let promise = this.db().then((db) => {
+    let promise = this.db().then((dbInstance) => {
       //Datenbank wurde geöffnet
+
+      db = dbInstance;
 
       let statementQueue = "" +
         "CREATE TABLE IF NOT EXISTS `queue` (" +

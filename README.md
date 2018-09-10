@@ -59,6 +59,14 @@ export class AppModule {}
 
 ```
 
+# Modulinformationen
+
+Erstellen des Modules
+`npm run build`
+
+Veröffentlichen des Modules
+`npm publish`
+
 # Lizenz
 
 Die Contentfly Plattform ist unter eine dualen Lizenz (AGPL v3 und properitär) verfügbar. Die genauen Lizenzbedingungen sind in der Datei _licence.txt_ zu finden.

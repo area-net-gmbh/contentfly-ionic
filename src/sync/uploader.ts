@@ -134,12 +134,13 @@ export class Uploader {
 
           promises.push(p);
         }else{
-          let params = {entity: object.entity, id: object.entity_id, data: objectComplete};
 
           let p = this.store.single(object.entity, object.entity_id).then((data) => {
             //Details zu Datensatz wurden geladen
 
             objectComplete = data;
+            let params = {entity: object.entity, id: object.entity_id, data: objectComplete};
+            
             return api.post('replace', params);
           }).then((data) => {
             //Datensatz wurde auf dem Server synchronsiert

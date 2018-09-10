@@ -27,10 +27,26 @@ export class Service {
 
   }
 
+  /**
+   * Gibt den Synchronisations-Prozess zurück
+   * @returns {Observable<Message>}
+   */
   private getData() {
     return this.data.asObservable();
   }
 
+  /**
+   * Setzt das API-Projekt, wird benötigt um die Method sync() aufzurufen
+   * @param {Api} api
+   */
+  public setApi(api : Api){
+    this.api = api;
+  }
+
+  /**
+   * Startet den Synchronisations-Projekt
+   * @returns {Observable<Message>}
+   */
   public sync(){
     if(!this.isSyncing){
       this.startSync();
@@ -39,10 +55,220 @@ export class Service {
     return this.getData();
   }
 
-  public setApi(api : Api){
-    this.api = api;
+  /**
+   * Startet die Synchronisation der Dateien
+   * @returns {Promise<any[]>}
+   */
+  private syncFiles(){
+    return this.store.query('SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE _hashLocal IS NULL OR hash != _hashLocal', []).then((files) => {
+      //Noch nicht synchronisierte Dateien wurden ermittelt
+
+      if(!files.length){
+        return Promise.resolve([]);
+      }
+
+      this.dataCount        = files.length;
+      this.currentDataCount = 0;
+
+      let allPromises = [];
+
+      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', 0, 1, this.dataCount));
+
+      for(let index = 0; index < files.length; index++){
+        let file = files[index];
+
+        let p = this.api.file(file['id']).then((blob) => {
+          //Binäre Datei/Blob wurde geladen
+
+          return this.file.writeFile(this.file.dataDirectory, file['id'], blob, {replace: true} );
+        }).then(() => {
+          //Blob wurde lokal gespeichert
+
+          let updateData = {
+            'id' : file['id'],
+            '_hashLocal' : file['hash']
+          };
+
+          return this.store.update('PIM\\File', updateData, true);
+        }).then(() => {
+          //Datenbank wurde aktualisiert
+
+          this.currentDataCount++;
+          let progress = Math.round(this.currentDataCount / this.dataCount * 100);
+          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+
+          return Promise.resolve();
+        }).catch((error) => {
+          this.logger.error('[sync.service->syncFiles] api/file', error);
+          return Promise.resolve();
+        });
+
+        allPromises.push(p);
+
+      }
+
+      return Promise.all(allPromises);
+    });
   }
 
+  /**
+   * Synchronisiert eine Mulijoin-Entity/-Tabelle
+   * @param {string} key
+   * @param {string} entityName
+   * @param {string} entityProperty
+   * @param {string} sourceTableName
+   * @param {string} sourceJoinField
+   * @param {string} destTableName
+   * @param {string} lastSyncDate
+   * @param {number} startFromChunk
+   * @returns {Promise<any>}
+   */
+  private syncMultijoinFromEntity(key: string, entityName : string, entityProperty : string, sourceTableName : string, sourceJoinField : string, destTableName: string, lastSyncDate : string, startFromChunk : number){
+
+    var from = {};
+    from[sourceTableName] = "src";
+
+    sourceJoinField = sourceJoinField.substr(0, 3) == 'pim' ? sourceJoinField.substr(3) : sourceJoinField;
+
+    let params = {
+      "select": "src.*",
+      "from": from,
+      "innerJoin": ["src", destTableName, "dest", "src." + sourceJoinField + " = dest.id"],
+      setMaxResults: SYNC_CHUNK_SIZE,
+      setFirstResult: this.syncState.getLastChunkSize(key)
+    };
+
+    if(lastSyncDate){
+      params['where'] = {'dest.modified > ?' : [lastSyncDate]};
+    }
+
+
+    return this.api.post('query', params).then((request) => {
+      //Datensätze seit letzter Synchronisierung wurden ermittelt
+
+      let data: any[] = request['data'] ? request['data'] : [];
+
+      if (data.length > 0) {
+        //Datensätze vorhanden und in Datenbank importieren
+
+        var promise = new Promise((resolve, reject) => {
+
+          this.store.importMultijoin(sourceTableName, data).subscribe(
+            () => {
+              this.currentDataCount++;
+              let progress = Math.round(this.currentDataCount / this.dataCount * 100);
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+            },
+            (error) => {
+              this.logger.error('[sync.service->syncFromEntity] store.import', error);
+              resolve();
+            },
+            () => {
+              //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
+
+              let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
+              this.syncState.setLastChunkSize(key, newStartFromChunK);
+              this.syncState.save();
+
+              this.syncMultijoinFromEntity(key, entityName, entityProperty, sourceTableName, sourceJoinField, destTableName, lastSyncDate, newStartFromChunK).then(() => {
+                resolve();
+              })
+            }
+          );
+        });
+
+        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
+        return promise;
+      } else {
+        //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
+
+        this.syncState.setLastChunkSize(key, 0);
+        this.syncState.setLastSyncDate(key, request['ts']);
+        this.syncState.save();
+
+        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
+        return Promise.resolve([]);
+      }
+    }).catch((error) => {
+      this.logger.error('[sync.service->syncMultijoinFromEntity] api/query', error);
+      return Promise.resolve([]);
+    });
+  }
+
+  /**
+   * Synchronisiert eine Entität
+   * @param {string} entityName
+   * @param {string} lastSyncDate
+   * @param {number} startFromChunk
+   * @returns {Promise<any>}
+   */
+  private syncFromEntity(entityName : string, lastSyncDate : string, startFromChunk : number){
+
+      let params = {
+        select: '*',
+        from: entityName,
+        setMaxResults: SYNC_CHUNK_SIZE,
+        setFirstResult: this.syncState.getLastChunkSize(entityName)
+      };
+
+      if(lastSyncDate){
+        params['where'] = {'modified > ?' : [lastSyncDate]};
+      }
+
+      return this.api.post('query', params).then((request) => {
+        //Datensätze seit letzter Synchronisierung wurden ermittelt
+
+        let data: any[] = request['data'] ? request['data'] : [];
+
+        if (data.length > 0) {
+          //Datensätze vorhanden und in Datenbank importieren
+
+          var promise = new Promise((resolve, reject) => {
+            this.store.import(entityName, data).subscribe(
+              () => {
+                this.currentDataCount++;
+                let progress = Math.round(this.currentDataCount / this.dataCount * 100);
+                this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+              },
+              (error) => {
+                this.logger.error('[sync.service->syncFromEntity] store.import', error);
+                resolve();
+              },
+              () => {
+                //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
+                let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
+                this.syncState.setLastChunkSize(entityName, newStartFromChunK);
+                this.syncState.save();
+
+                this.syncFromEntity(entityName, lastSyncDate, newStartFromChunK).then(() => {
+                  resolve();
+                });
+              }
+            );
+          });
+
+          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
+          return promise;
+
+        }else{
+          //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
+
+          this.syncState.setLastChunkSize(entityName, 0);
+          this.syncState.setLastSyncDate(entityName, request['ts']);
+          this.syncState.save();
+
+          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
+          return Promise.resolve([]);
+        }
+      }).catch((error) => {
+        this.logger.error('[sync.service->syncFromEntity] api/query', error);
+        return Promise.resolve([]);
+      });
+  }
+
+  /**
+   * Startet den Synchronisations-Prozess
+   */
   private startSync(){
     this.isSyncing  = true;
 
@@ -54,8 +280,9 @@ export class Service {
     });
   }
 
+
   /**
-   * Startet
+   * Startet Synchronisations-Prozess vom Server
    * @returns {Promise<void>}
    */
   private startSyncFrom(){
@@ -190,194 +417,10 @@ export class Service {
 
   }
 
-  private syncFiles(){
-    return this.store.query('SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE _hashLocal IS NULL OR hash != _hashLocal', []).then((files) => {
-      //Noch nicht synchronisierte Dateien wurden ermittelt
-
-      if(!files.length){
-        return Promise.resolve([]);
-      }
-
-      this.dataCount        = files.length;
-      this.currentDataCount = 0;
-
-      let allPromises = [];
-
-      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', 0, 1, this.dataCount));
-
-      for(let index = 0; index < files.length; index++){
-        let file = files[index];
-
-        let p = this.api.file(file['id']).then((blob) => {
-          //Binäre Datei/Blob wurde geladen
-
-          return this.file.writeFile(this.file.dataDirectory, file['id'], blob, {replace: true} );
-        }).then(() => {
-          //Blob wurde lokal gespeichert
-
-          let updateData = {
-            'id' : file['id'],
-            '_hashLocal' : file['hash']
-          };
-
-          return this.store.update('PIM\\File', updateData, true);
-        }).then(() => {
-          //Datenbank wurde aktualisiert
-
-          this.currentDataCount++;
-          let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
-
-          return Promise.resolve();
-        }).catch((error) => {
-          this.logger.error('[sync.service->syncFiles] api/file', error);
-          return Promise.resolve();
-        });
-
-        allPromises.push(p);
-
-      }
-
-      return Promise.all(allPromises);
-    });
-  }
-
-  private syncMultijoinFromEntity(key: string, entityName : string, entityProperty : string, sourceTableName : string, sourceJoinField : string, destTableName: string, lastSyncDate : string, startFromChunk : number){
-
-    var from = {};
-    from[sourceTableName] = "src";
-
-    sourceJoinField = sourceJoinField.substr(0, 3) == 'pim' ? sourceJoinField.substr(3) : sourceJoinField;
-
-    let params = {
-      "select": "src.*",
-      "from": from,
-      "innerJoin": ["src", destTableName, "dest", "src." + sourceJoinField + " = dest.id"],
-      setMaxResults: SYNC_CHUNK_SIZE,
-      setFirstResult: this.syncState.getLastChunkSize(key)
-    };
-
-    if(lastSyncDate){
-      params['where'] = {'dest.modified > ?' : [lastSyncDate]};
-    }
-
-
-    return this.api.post('query', params).then((request) => {
-      //Datensätze seit letzter Synchronisierung wurden ermittelt
-
-      let data: any[] = request['data'] ? request['data'] : [];
-
-      if (data.length > 0) {
-        //Datensätze vorhanden und in Datenbank importieren
-
-        var promise = new Promise((resolve, reject) => {
-
-          this.store.importMultijoin(sourceTableName, data).subscribe(
-            () => {
-              this.currentDataCount++;
-              let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
-            },
-            (error) => {
-              this.logger.error('[sync.service->syncFromEntity] store.import', error);
-              resolve();
-            },
-            () => {
-              //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
-
-              let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
-              this.syncState.setLastChunkSize(key, newStartFromChunK);
-              this.syncState.save();
-
-              this.syncMultijoinFromEntity(key, entityName, entityProperty, sourceTableName, sourceJoinField, destTableName, lastSyncDate, newStartFromChunK).then(() => {
-                resolve();
-              })
-            }
-          );
-        });
-
-        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-        return promise;
-      } else {
-        //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
-
-        this.syncState.setLastChunkSize(key, 0);
-        this.syncState.setLastSyncDate(key, request['ts']);
-        this.syncState.save();
-
-        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-        return Promise.resolve([]);
-      }
-    }).catch((error) => {
-      this.logger.error('[sync.service->syncMultijoinFromEntity] api/query', error);
-      return Promise.resolve([]);
-    });
-  }
-
-  private syncFromEntity(entityName : string, lastSyncDate : string, startFromChunk : number){
-
-      let params = {
-        select: '*',
-        from: entityName,
-        setMaxResults: SYNC_CHUNK_SIZE,
-        setFirstResult: this.syncState.getLastChunkSize(entityName)
-      };
-
-      if(lastSyncDate){
-        params['where'] = {'modified > ?' : [lastSyncDate]};
-      }
-
-      return this.api.post('query', params).then((request) => {
-        //Datensätze seit letzter Synchronisierung wurden ermittelt
-
-        let data: any[] = request['data'] ? request['data'] : [];
-
-        if (data.length > 0) {
-          //Datensätze vorhanden und in Datenbank importieren
-
-          var promise = new Promise((resolve, reject) => {
-            this.store.import(entityName, data).subscribe(
-              () => {
-                this.currentDataCount++;
-                let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-                this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
-              },
-              (error) => {
-                this.logger.error('[sync.service->syncFromEntity] store.import', error);
-                resolve();
-              },
-              () => {
-                //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
-                let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
-                this.syncState.setLastChunkSize(entityName, newStartFromChunK);
-                this.syncState.save();
-
-                this.syncFromEntity(entityName, lastSyncDate, newStartFromChunK).then(() => {
-                  resolve();
-                });
-              }
-            );
-          });
-
-          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-          return promise;
-
-        }else{
-          //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
-
-          this.syncState.setLastChunkSize(entityName, 0);
-          this.syncState.setLastSyncDate(entityName, request['ts']);
-          this.syncState.save();
-
-          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-          return Promise.resolve([]);
-        }
-      }).catch((error) => {
-        this.logger.error('[sync.service->syncFromEntity] api/query', error);
-        return Promise.resolve([]);
-      });
-  }
-
+  /**
+   * Startet Synchronisations-Prozess zum Server
+   * @returns {Promise<any[]>}
+   */
   private startSyncTo(){
     this.data  = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
 
