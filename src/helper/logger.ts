@@ -1,8 +1,14 @@
 import {Injectable} from "@angular/core";
+import {Events} from "ionic-angular";
+import {CONTENTFLY_NEW_LOGMESSAGE} from "../constants";
 
 @Injectable()
 export class Logger {
   private enabled : boolean = true;
+
+  constructor(private events : Events){
+
+  }
 
   setEnabled(enabled : boolean){
     this.enabled = enabled;
@@ -19,6 +25,7 @@ export class Logger {
         }
       }
 
+      this.events.publish(CONTENTFLY_NEW_LOGMESSAGE, debugMsd);
       console.log(debugMsd);
     }
   }
@@ -34,9 +41,9 @@ export class Logger {
         }
       }
 
+      this.events.publish(CONTENTFLY_NEW_LOGMESSAGE, debugMsd);
       console.log(debugMsd);
     }
   }
-
 
 }

@@ -19,6 +19,10 @@ export class Schema {
     });
   }
 
+  getMultijoinDetails(){
+
+  }
+
   set(schema: any){
     this.hash         = schema.data._hash;
     this.data         = schema.data;
