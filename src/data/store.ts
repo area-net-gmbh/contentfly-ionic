@@ -20,81 +20,90 @@ export class Store {
 
   }
 
+  /**
+   * Schema einer bestehenden Tabelle anpassen
+   * @param {SQLiteObject} db
+   * @param entityConfig
+   * @param entityOldConfig
+   * @returns {Promise<any>}
+   */
   private alterTableForEntity(db: SQLiteObject, entityConfig : any, entityOldConfig : any){
 
-    let promise = new Promise((resolve, reject) => {
-      let dbName: string = entityConfig.settings.dbname;
+    let dbName: string = entityConfig.settings.dbname;
 
-      let tempProperties : string[] = [];
-      for (let property in entityOldConfig.properties) {
-        if(!entityConfig.properties[property]){
-          continue;
-        }
-        if(entityConfig.properties[property]['type'] == 'multijoin' || entityConfig.properties[property]['type'] == 'multifile'){
-          continue
-        }
-        if(entityConfig.properties[property]['type'] == 'join'){
-          tempProperties.push('`' + property + '_id' + '`');
-          continue;
-        }
-        if(entityConfig.properties[property]['type'] == 'file'){
-          tempProperties.push('`file_id`');
-          continue;
-        }
-
-        tempProperties.push('`' + property + '`');
+    let tempProperties : string[] = [];
+    for (let property in entityOldConfig.properties) {
+      if(!entityConfig.properties[property]){
+        continue;
+      }
+      if(entityConfig.properties[property]['type'] == 'multijoin' || entityConfig.properties[property]['type'] == 'multifile'){
+        continue
+      }
+      if(entityConfig.properties[property]['type'] == 'join'){
+        tempProperties.push('`' + property + '_id' + '`');
+        continue;
+      }
+      if(entityConfig.properties[property]['type'] == 'file'){
+        tempProperties.push('`file_id`');
+        continue;
       }
 
-      db.sqlBatch([
-        'CREATE TABLE IF NOT EXISTS temp_' + dbName + ' AS SELECT ' + tempProperties.join(',') + ' FROM ' + dbName,
-        'DROP TABLE IF EXISTS ' + dbName]
-      ).then(() => {
-        this.createTableForEntity(db, entityConfig).then(() => {
-          db.sqlBatch([
-            'INSERT INTO ' + dbName + '(' + tempProperties.join(',') + ') SELECT ' + tempProperties.join(',') + ' FROM temp_' + dbName,
-            'DROP TABLE temp_' + dbName
-          ]).then( () =>  {
-            resolve();
-          }).catch((error) => {
-            db.sqlBatch([
-              'DROP TABLE IF EXISTS ' + dbName,
-              'ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName,
-             ]);
-            reject();
-          });
+      tempProperties.push('`' + property + '`');
+    }
 
-        }).catch((error) => {
-          db.executeSql('ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName, []);
-          reject();
-        });
-      }).catch((error) => {
-        reject();
+    let statements = [
+      'CREATE TABLE IF NOT EXISTS temp_' + dbName + ' AS SELECT ' + tempProperties.join(',') + ' FROM ' + dbName,
+      'DROP TABLE IF EXISTS ' + dbName
+    ];
+
+    let promise = db.sqlBatch(statements).then(() => {
+      //Bestehende Tabelle wurde in Temp-Tabelle kopiert
+
+      return this.createTableForEntity(db, entityConfig).catch((error) => {
+        db.executeSql('ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName, []);
+
+        return Promise.reject(error);
       });
+    }).then(() => {
+      //Neue Tabelle wurde angelegt und Daen kopiert
 
+      let subStatements = [
+        'INSERT INTO ' + dbName + '(' + tempProperties.join(',') + ') SELECT ' + tempProperties.join(',') + ' FROM temp_' + dbName,
+        'DROP TABLE temp_' + dbName
+      ];
+
+      return db.sqlBatch(subStatements).catch((error) => {
+        db.sqlBatch([
+          'DROP TABLE IF EXISTS ' + dbName,
+          'ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName,
+        ]);
+
+        return Promise.reject(error);
+      });
+    });
+
+    return promise;
+
+  }
+
+  /**
+   * Ausführen von mehreren SQL-Kommandoes im Batch-Modus
+   * @param {string[]} commands
+   * @returns {Promise<SQLiteObject>}
+   */
+  public batch(commands : string[]){
+    let promise = this.db().then((db) => {
+      return db.sqlBatch(commands);
     });
 
     return promise;
   }
 
-
-
-  batch(commands : string[]){
-    let promise = new Promise((resolve, reject) => {
-      this.db().then((db) => {
-        db.sqlBatch(commands).then(() => {
-          resolve();
-        }).catch((error) => {
-          reject(error);
-        });
-      }).catch((error) => {
-        reject(error);
-      });
-    });
-
-    return promise;
-  }
-
-
+  /**
+   * Bool auf Integer casten
+   * @param value
+   * @returns {number}
+   */
   private boolVal2Int(value: any) {
     value = String(value);
 
@@ -105,163 +114,163 @@ export class Store {
     }
   }
 
+  /**
+   * Erstellt die Tabelle für eine Entität
+   * @param {SQLiteObject} db
+   * @param entityConfig
+   * @returns {Promise<void>}
+   */
   private createTableForEntity(db: SQLiteObject, entityConfig : any){
-    let promise = new Promise((resolve, reject) => {
-      let dbName: string = entityConfig.settings.dbname;
-      let createTableString: string = "CREATE TABLE `" + dbName + "` (";
-      let propertiesCreateStatement: string[] = [];
 
-      if(dbName == 'pim_file'){
-        entityConfig.properties['_hashLocal'] = {
-          'type' : 'string',
-        }
+    let dbName: string = entityConfig.settings.dbname;
+    let createTableString: string = "CREATE TABLE `" + dbName + "` (";
+    let propertiesCreateStatement: string[] = [];
+
+    let statements = [];
+
+    if(dbName == 'pim_file'){
+      entityConfig.properties['_hashLocal'] = {
+        'type' : 'string',
       }
+    }
 
-      for (let property in entityConfig.properties) {
-        let propertyConfig: any = entityConfig.properties[property];
-        let type: string = propertyConfig.type;
-        let dbtype: string = "";
-        let special: string = "";
+    for (let property in entityConfig.properties) {
+      let propertyConfig: any = entityConfig.properties[property];
+      let type: string = propertyConfig.type;
+      let dbtype: string = "";
+      let special: string = "";
 
-        switch (type) {
-          case "virtualjoin":
-            dbtype = "TEXT";
-            break;
-          case "checkbox":
-          case "boolean":
-            dbtype = "INTEGER";
-            break;
-          case "join":
-          case "file":
-            dbtype = "TEXT";
-            property =  property + '_id';
-            break;
-          case "multifile":
-            var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
-            var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `file_id`))";
-            db.executeSql(sqlMF, [])
-              .then(() => {
-              })
-              .catch(e => {
+      switch (type) {
+        case "virtualjoin":
+          dbtype = "TEXT";
+          break;
+        case "checkbox":
+        case "boolean":
+          dbtype = "INTEGER";
+          break;
+        case "join":
+        case "file":
+          dbtype = "TEXT";
+          property =  property + '_id';
+          break;
+        case "multifile":
+          var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
+          var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `file_id`))";
 
-                reject("APP-CMS: Cannot create table " + dbName + "_" + property);
-              });
-            break;
-          case "multijoin":
-            if(!propertyConfig.foreign){
-              continue;
-            }
-            
-            var joinedTableName = propertyConfig.foreign;
-            var joinedEntity = propertyConfig.accept.substr(0, 13) == 'Custom\\Entity'
-              ? propertyConfig.accept.substr(14)
-              : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
-            var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
-            var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `" + joinedEntityDbname.replace('_', '') + "_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `" + joinedEntityDbname.replace('_', '') + "_id`))";
-
-            db.executeSql(sql, [])
-              .then(() => {
-              })
-              .catch(e => {
-                reject("APP-CMS: Cannot create table " + dbName + "_" + property);
-              });
-
+          statements.push([sqlMF, []]);
+          break;
+        case "multijoin":
+          if(!propertyConfig.foreign){
             continue;
-          case "decimal":
-            dbtype = "FLOAT";
-          case "string":
-          case "datetime":
-          case "date":
-          case "time":
-            dbtype = "TEXT";
-            break;
-          default:
-            dbtype = propertyConfig.dbtype;
-            break
-        }
-
-        if (property == "id") {
-          special = "PRIMARY KEY NOT NULL";
-        } else if (propertyConfig.nullable === false) {
-          special = "NOT NULL";
-        }
-
-        propertiesCreateStatement.push("`" + property + "` " + dbtype + " " + special);
-
-      }
-
-      createTableString += propertiesCreateStatement.join(", ");
-      createTableString += ")";
-
-      db.executeSql(createTableString, [])
-        .then(() => {
-          resolve();
-        })
-        .catch(e => {
-          if(e.code == 5){
-            resolve();
-          }else{
-            reject("APP-CMS: Cannot create table " + dbName);
           }
 
-        });
-    });
+          var joinedTableName = propertyConfig.foreign;
+          var joinedEntity = propertyConfig.accept.substr(0, 13) == 'Custom\\Entity'
+            ? propertyConfig.accept.substr(14)
+            : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
+          var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
+          var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `" + joinedEntityDbname.replace('_', '') + "_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `" + joinedEntityDbname.replace('_', '') + "_id`))";
 
-    return promise;
+          statements.push([sql, []]);
 
-  }
+          continue;
+        case "decimal":
+          dbtype = "FLOAT";
+        case "string":
+        case "datetime":
+        case "date":
+        case "time":
+          dbtype = "TEXT";
+          break;
+        default:
+          dbtype = propertyConfig.dbtype;
+          break
+      }
 
-  db(){
-    var promise = new Promise<SQLiteObject>((resolve, reject) => {
-      if(this._db != null){
-        resolve(this._db);
-      }else {
-        this.sqlite.create({
-          name: DB_NAME,
-          location: 'default'
-        }).then((db: SQLiteObject) => {
-          this._db = db;
-          resolve(this._db);
-          this.logger.info("DB.CREATED/OPENED ", DB_NAME);
+      if (property == "id") {
+        special = "PRIMARY KEY NOT NULL";
+      } else if (propertyConfig.nullable === false) {
+        special = "NOT NULL";
+      }
 
-        }).catch(error => {
+      propertiesCreateStatement.push("`" + property + "` " + dbtype + " " + special);
 
-          this.logger.error("DB.CREATED/OPENED ", error.toString());
-        });
+    }
+
+    createTableString += propertiesCreateStatement.join(", ");
+    createTableString += ")";
+
+    statements.push([createTableString, []]);
+
+    return db.sqlBatch(statements).then(() => {
+      return Promise.resolve();
+    }).catch((error) => {
+      if(error.code == 5){
+        return Promise.resolve();
+      }else{
+        return Promise.reject(error);
       }
     });
-
-    return promise;
   }
 
-  delete(entityName : string, id : string){
-    var promise = new Promise<string>((resolve, reject) => {
-      this.db().then((db) => {
-        let entityConfig = this.schema.data[entityName];
-        if (!entityConfig) {
-          this.logger.error("store.delete::" + entityName + ": nicht vorhanden", id);
-          return;
-        }
-
-        let dbName             = entityConfig.settings.dbname;
-        let statement = "DELETE FROM `" + dbName + "` WHERE id = ?";
-
-        db.executeSql(statement, [id]).then(() => {
-          this.logger.info("store.delete::" + entityName, id);
-          this.insertQueue(entityName, id, QueueType.deleted);
-          resolve();
-        }).catch((error) => {
-          this.logger.error("store.delete::" + entityName + ":" +id, error);
-          reject(error);
-        })
+  /**
+   * Gibt die Datenbank-Instanz zurück
+   * @returns {Promise<SQLiteObject>}
+   */
+  public db(){
+    if(this._db != null){
+      return Promise.resolve(this._db);
+    }else {
+      return this.sqlite.create({
+        name: DB_NAME,
+        location: 'default'
+      }).then((db: SQLiteObject) => {
+        this._db = db;
+        this.logger.info("DB.CREATED/OPENED ", DB_NAME);
+        return Promise.resolve(this._db);
+      }).catch(error => {
+        this.logger.error("DB.CREATED/OPENED ", error.toString());
+        return Promise.reject(error);
       });
+    }
+  }
+
+  /**
+   * Löscht einen Datensatz einer Entität
+   * @param {string} entityName
+   * @param {string} id
+   * @returns {Promise<void>}
+   */
+  public delete(entityName : string, id : string){
+    let promise = this.db().then((db) => {
+      let entityConfig = this.schema.data[entityName];
+      if (!entityConfig) {
+        this.logger.error("store.delete::" + entityName + ": nicht vorhanden", id);
+        return Promise.reject("store.delete::" + entityName + ": nicht vorhanden");
+      }
+
+      let dbName             = entityConfig.settings.dbname;
+      let statement = "DELETE FROM `" + dbName + "` WHERE id = ?";
+
+      return db.executeSql(statement, [id]).then(() => {
+        this.logger.info("store.delete::" + entityName, id);
+        this.insertQueue(entityName, id, QueueType.deleted);
+        return Promise.resolve();
+      }).catch((error) => {
+        this.logger.error("store.delete::" + entityName + ":" +id, error);
+        return Promise.reject(error);
+      })
     });
 
     return promise;
   }
 
-  deleteDatabase(){
+  /**
+   * Löscht die Datenbank, z.B. beim Logout
+   */
+  public deleteDatabase(){
     this._db  = null;
+
     this.sqlite.deleteDatabase({
       name: DB_NAME,
       location: 'default'
@@ -272,7 +281,12 @@ export class Store {
     });
   }
 
-
+  /**
+   * Importiert mehrere Datensätzte einer Entität
+   * @param {string} entity
+   * @param {any[]} data
+   * @returns {Observable<any>}
+   */
   public import(entity: string, data : any[]){
     let observer = new Observable(observer => {
 
@@ -341,16 +355,11 @@ export class Store {
             observer.next();
           }
 
-
-
-          db.sqlBatch(batchStatements).then(() => {
-            observer.complete();
-          }).catch((error)=>{
-            this.logger.error("SYNC store.import::" + entity, error);
-            observer.complete();
-          });
-
-      }).catch(() => {
+          return db.sqlBatch(batchStatements);
+      }).then(() => {
+        observer.complete();
+      }).catch((error) => {
+        this.logger.error("SYNC store.import::" + entity, error);
         observer.complete();
       });
     });
@@ -358,6 +367,12 @@ export class Store {
     return observer;
   }
 
+  /**
+   * Importiert mehrere Datensätze einer Multijoin-Tabelle
+   * @param {string} tableName
+   * @param {any[]} data
+   * @returns {Observable<any>}
+   */
   importMultijoin(tableName: string, data : any[]){
     let observer = new Observable(observer => {
 
@@ -388,168 +403,167 @@ export class Store {
           observer.next();
         }
 
+        return db.sqlBatch(batchStatements):
 
-
-        db.sqlBatch(batchStatements).then(() => {
-          observer.complete();
-        }).catch((error)=>{
-          this.logger.error("SYNC store.importMultijoin::" + tableName, error);
-          observer.complete();
-        });
-
-      }).catch(() => {
+      }).then(() => {
+        observer.complete();
+      }).catch((error) => {
+        this.logger.error("SYNC store.importMultijoin::" + tableName, error);
+        observer.complete();
       });
     });
 
     return observer;
   }
 
-  insert(entityName : string, data : any){
-    var promise = new Promise<string>((resolve, reject) => {
+  /**
+   * Fügt einen neuen Datensatz einer Entität ein
+   * @param {string} entityName
+   * @param data
+   * @returns {Promise<string>}
+   */
+  public insert(entityName : string, data : any){
+    let returnId : string  = null;
 
-      this.db().then((db) => {
+    let promise = this.db().then((db) => {
 
-        let entityConfig = this.schema.data[entityName];
-        if (!entityConfig) {
-          this.logger.error("store.insert::" + entityName + ": nicht vorhanden", data);
-          return;
+      let entityConfig = this.schema.data[entityName];
+      if (!entityConfig) {
+        this.logger.error("store.insert::" + entityName + ": nicht vorhanden", data);
+        return Promise.reject("store.insert::" + entityName + ": nicht vorhanden");
+      }
+
+      let dbName             = entityConfig.settings.dbname;
+
+      let excludedProps      = ['created', 'modified', 'id', 'isIntern'];
+
+      let dataArray = Array.isArray(data) ? data : [data];
+      let statements : any[] = [];
+
+      for (var i = 0; i < dataArray.length; i++) {
+        let dataObject = dataArray[i];
+
+        let insertFields       = [];
+        let insertPlaceholders = [];
+        let params             = [];
+
+        let id  :string = uuid();
+
+        if(i == 0){
+          returnId = id
         }
 
-        let returnId : string  = null;
-        let dbName             = entityConfig.settings.dbname;
+        //[{entity_name : entity_id}]
+        let joins : any[] = [];
 
-        let excludedProps      = ['created', 'modified', 'id', 'isIntern'];
+        for (let propName in dataObject) {
+          propName = propName.replace('_id', '');
+          let propConfig = entityConfig.properties[propName];
+          if (!propConfig || excludedProps.indexOf(propName) >= 0 ) continue;
 
-        let dataArray = Array.isArray(data) ? data : [data];
-        let statements : any[] = [];
+          switch(propConfig['type']){
+            case 'datetime':
+              if(dataObject[propName] == 'NOW()'){
+                insertFields.push("`" + propName + "`");
+                insertPlaceholders.push("datetime('now')");
+              }else{
+                insertFields.push("`" + propName + "`");
+                insertPlaceholders.push("?");
+                params.push(dataObject[propName]);
+              }
+              break;
+            case 'multifile':
+              var joinedTableNameMF       = propConfig.foreign ? propConfig.foreign :  propConfig.dbName + "_" + propName;
+              var joinedField             = dbName.replace('_', '') + '_id';
 
-        for (var i = 0; i < dataArray.length; i++) {
-          let dataObject = dataArray[i];
-
-          let insertFields       = [];
-          let insertPlaceholders = [];
-          let params             = [];
-
-          let id  :string = uuid();
-
-          if(i == 0){
-            returnId = id
-          }
-
-          //[{entity_name : entity_id}]
-          let joins : any[] = [];
-
-          for (let propName in dataObject) {
-            propName = propName.replace('_id', '');
-            let propConfig = entityConfig.properties[propName];
-            if (!propConfig || excludedProps.indexOf(propName) >= 0 ) continue;
-
-            switch(propConfig['type']){
-              case 'datetime':
-                if(dataObject[propName] == 'NOW()'){
-                  insertFields.push("`" + propName + "`");
-                  insertPlaceholders.push("datetime('now')");
-                }else{
-                  insertFields.push("`" + propName + "`");
-                  insertPlaceholders.push("?");
-                  params.push(dataObject[propName]);
+              if(data[propName] != null){
+                for(let file of data[propName]){
+                  var file_id = (file === Object(file)) ? file['id'] : file;
+                  statements.push(["INSERT INTO `" + joinedTableNameMF + "` (`" + joinedField + "`, `file_id`) VALUES(?, ?)", [id, file_id]]);
+                  joins.push({entity_name : 'PIM\\File', entity_id: file_id});
                 }
-                break;
-              case 'multifile':
-                var joinedTableNameMF       = propConfig.foreign ? propConfig.foreign :  propConfig.dbName + "_" + propName;
-                var statementsMulti : any[] = [];
-                var joinedField             = dbName.replace('_', '') + '_id';
+              }
+              break;
+            //@todo: multijoin
+            case 'file':
+            case 'join':
 
-                if(data[propName] != null){
-                  for(let file of data[propName]){
-                    var file_id = (file === Object(file)) ? file['id'] : file;
-                    statementsMulti.push(["INSERT INTO `" + joinedTableNameMF + "` (`" + joinedField + "`, `file_id`) VALUES(?, ?)", [id, file_id]]);
-                    joins.push({entity_name : 'PIM\\File', entity_id: file_id});
-                  }
-                  db.sqlBatch(statementsMulti).then(() => {
+              propName = propName + '_id';
+              insertFields.push("`" + propName + "`");
+              insertPlaceholders.push("?");
+              params.push(dataObject[propName]);
 
-                  }).catch((error) => {
-                    this.logger.error('store:insert:multifile', error);
-                  });
-                }
-                break;
-              //@todo: multijoin
-              case 'file':
-              case 'join':
+              let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
+              joins.push({entity_name : joinedEntity, entity_id: dataObject[propName]});
 
-                propName = propName + '_id';
-                insertFields.push("`" + propName + "`");
-                insertPlaceholders.push("?");
-                params.push(dataObject[propName]);
-
-                let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
-                joins.push({entity_name : joinedEntity, entity_id: dataObject[propName]});
-
-                break;
-              case 'checkbox':
-              case 'boolean':
-                data[propName] = this.boolVal2Int(dataObject[propName]);
-                insertFields.push("`" + propName + "`");
-                insertPlaceholders.push("?");
-                params.push(dataObject[propName]);
-              default:
-                insertFields.push("`" + propName + "`");
-                insertPlaceholders.push("?");
-                params.push(dataObject[propName]);
-                break;
-            }
+              break;
+            case 'checkbox':
+            case 'boolean':
+              data[propName] = this.boolVal2Int(dataObject[propName]);
+              insertFields.push("`" + propName + "`");
+              insertPlaceholders.push("?");
+              params.push(dataObject[propName]);
+            default:
+              insertFields.push("`" + propName + "`");
+              insertPlaceholders.push("?");
+              params.push(dataObject[propName]);
+              break;
           }
-
-          insertFields.push("`isIntern`");
-          insertPlaceholders.push("0");
-          insertFields.push("`user_id`");
-          insertPlaceholders.push("?");
-          params.push(this.user.id);
-          insertFields.push("`userCreated_id`");
-          insertPlaceholders.push("?");
-          params.push(this.user.id);
-          insertFields.push("`created`");
-          insertPlaceholders.push("datetime('now')");
-          insertFields.push("`modified`");
-          insertPlaceholders.push("datetime('now')");
-          insertFields.push("`id`");
-          insertPlaceholders.push("?");
-          params.push(id);
-
-          let statement = "" +
-            "INSERT INTO `" + dbName + "` (" + insertFields.join(", ") + ") " +
-            "VALUES (" + insertPlaceholders.join(", ") + ")";
-
-          statements.push([statement, params]);
-
-          let queueId : string    = uuid();
-          let paramsQueue : any[] = [queueId, entityName, id, QueueType.inserted, JSON.stringify(joins)];
-          let statementQueue      = "" +
-            "INSERT INTO queue " +
-            " (id, entity, entity_id, mode, joins, created, syncErrors) " +
-            "VALUES " +
-            " (?, ?, ?, ?, ?, datetime('now'), 0)";
-
-          statements.push([statementQueue, paramsQueue]);
         }
 
-        db.sqlBatch(statements).then(() => {
-          this.logger.info("store.insert::" + entityName + "::" + returnId + " gespeichert", data);
-          resolve(returnId);
-        }).catch((error) => {
-          this.logger.error("store.insert::" + entityName, error);
-          reject("Fehler beim Speichern.");
-        })
+        insertFields.push("`isIntern`");
+        insertPlaceholders.push("0");
+        insertFields.push("`user_id`");
+        insertPlaceholders.push("?");
+        params.push(this.user.id);
+        insertFields.push("`userCreated_id`");
+        insertPlaceholders.push("?");
+        params.push(this.user.id);
+        insertFields.push("`created`");
+        insertPlaceholders.push("datetime('now')");
+        insertFields.push("`modified`");
+        insertPlaceholders.push("datetime('now')");
+        insertFields.push("`id`");
+        insertPlaceholders.push("?");
+        params.push(id);
 
-      }).catch((error) =>{
-        this.logger.error("store.insert::" + entityName, error);
-        reject("Fehler beim Speichern.");
-      })
+        let statement = "" +
+          "INSERT INTO `" + dbName + "` (" + insertFields.join(", ") + ") " +
+          "VALUES (" + insertPlaceholders.join(", ") + ")";
+
+        statements.push([statement, params]);
+
+        let queueId : string    = uuid();
+        let paramsQueue : any[] = [queueId, entityName, id, QueueType.inserted, JSON.stringify(joins)];
+        let statementQueue      = "" +
+          "INSERT INTO queue " +
+          " (id, entity, entity_id, mode, joins, created, syncErrors) " +
+          "VALUES " +
+          " (?, ?, ?, ?, ?, datetime('now'), 0)";
+
+        statements.push([statementQueue, paramsQueue]);
+      }
+
+      return db.sqlBatch(statements);
+
+    }).then(() => {
+      this.logger.info("store.insert::" + entityName + "::" + returnId + " gespeichert", data);
+      return Promise.resolve(returnId);
+    }).catch((error) =>{
+      this.logger.error("store.insert::" + entityName, error);
+      return Promise.reject(error);
     });
 
     return promise;
   }
 
+  /**
+   * Fügt eine lokale Änderung in die Synchronisations-Queue ein
+   * @param {string} entity
+   * @param {string} entity_id
+   * @param {QueueType} mode
+   * @param {any[]} joins
+   */
   private insertQueue(entity : string, entity_id : string, mode : QueueType, joins : any[] = []){
     this.db().then((db) => {
       let statement = "" +
@@ -560,11 +574,17 @@ export class Store {
 
       let id  :string = uuid();
 
-      db.executeSql(statement, [id, entity, entity_id, mode, JSON.stringify(joins)]);
-    });
+      db.executeSql(statement, [id, entity, entity_id, mode, JSON.stringify(joins)]).then(() => {
+
+      }).catch((error) => {});
+    }).catch((error) => {});;
   }
 
-  queue(){
+  /**
+   * Gibt die Queue mit den zu synchronisierenden, lokalen Änderungen zurück
+   * @returns {Promise<any[]>}
+   */
+  public queue(){
     let statement = "" +
       "SELECT * " +
       "FROM `queue` " +
@@ -599,305 +619,307 @@ export class Store {
 
   }
 
-  setUser(user : User){
+  /**
+   * Setzt den eingeloggten Benutzer
+   * @param {User} user
+   */
+  public setUser(user : User){
     this.user = user;
   }
 
-  single(entityName : string, id : string){
-    var promise = new Promise<any>((resolve, reject) => {
-      this.db().then((db) => {
-        let entityConfig = this.schema.data[entityName];
-        if (!entityConfig) {
-          this.logger.error("store.single::entity not exists", entityName);
-          return;
+  /**
+   * Gibt einen einzelnen Datensatz einer Entität zurück
+   * @param {string} entityName
+   * @param {string} id
+   * @returns {Promise<any>}
+   */
+  public single(entityName : string, id : string){
+    let entityConfig = this.schema.data[entityName];
+
+    let promise = this.db().then((db) => {
+      //Datenbank wurde geöffnet
+
+      if (!entityConfig) {
+        this.logger.error("store.single::entity not exists", entityName);
+        return Promise.reject("store.single::entity not exists",);
+      }
+
+      let fields = ['src.*'];
+      let order  = [];
+      let joins  = [];
+      let dbName = entityConfig.settings.dbname;
+
+      for(let propertyName in entityConfig.properties){
+        let propertyConfig = entityConfig.properties[propertyName];
+
+        if(propertyConfig.type == 'multijoin' && propertyConfig.foreign){
+          var joinedTableName = propertyConfig.foreign;
+          var joinedEntity = propertyConfig.accept.substr(0, 13) == 'Custom\\Entity'
+            ? propertyConfig.accept.substr(14)
+            : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
+          var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
+
+          order.push(propertyName);
+          fields.push(propertyName + '.' + joinedEntityDbname.replace('_', '') + '_id AS ' + propertyName);
+          joins.push('LEFT JOIN ' + joinedTableName + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
+
         }
 
-        let fields = ['src.*'];
-        let order  = [];
-        let joins  = [];
-        let dbName = entityConfig.settings.dbname;
+        if(propertyConfig.type == 'multifile'){
+          var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + joinedTableName;
+          order.push(propertyName);
+          fields.push(propertyName + '.file_id AS ' + propertyName);
+          joins.push('LEFT JOIN ' + joinedTableNameMF + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
+        }
+      }
 
+      let statement = "" +
+        "SELECT " + fields.join(', ') +
+        " FROM `" + dbName + "` AS src " +
+        joins.join(' ') +
+        " WHERE src.id = ?";
+
+      if(order.length > 0){
+        statement += " ORDER BY " + order.join(', ');
+      }
+
+      return db.executeSql(statement, [id]);
+    }).then((objects) => {
+      //Aktueller Datensat wurde geladen
+
+      if(objects.rows.length == 0){
+        return Promise.resolve([]);
+      }
+
+      let objectCombined = null;
+
+      for (var i = 0; i < objects.rows.length; i++) {
+        let object =  objects.rows.item(i);
         for(let propertyName in entityConfig.properties){
           let propertyConfig = entityConfig.properties[propertyName];
-
-          if(propertyConfig.type == 'multijoin' && propertyConfig.foreign){
-            var joinedTableName = propertyConfig.foreign;
-            var joinedEntity = propertyConfig.accept.substr(0, 13) == 'Custom\\Entity'
-              ? propertyConfig.accept.substr(14)
-              : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
-            var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
-
-            order.push(propertyName);
-            fields.push(propertyName + '.' + joinedEntityDbname.replace('_', '') + '_id AS ' + propertyName);
-            joins.push('LEFT JOIN ' + joinedTableName + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
-
-          }
-
-          if(propertyConfig.type == 'multifile'){
-            var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + joinedTableName;
-            order.push(propertyName);
-            fields.push(propertyName + '.file_id AS ' + propertyName);
-            joins.push('LEFT JOIN ' + joinedTableNameMF + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
-          }
-        }
-
-        let statement = "" +
-          "SELECT " + fields.join(', ') +
-          " FROM `" + dbName + "` AS src " +
-          joins.join(' ') +
-          " WHERE src.id = ?";
-
-        if(order.length > 0){
-          statement += " ORDER BY " + order.join(', ');
-        }
-
-        db.executeSql(statement, [id]).then((objects) => {
-
-          if(objects.rows.length > 0){
-
-            let objectCombined = null;
-
-            for (var i = 0; i < objects.rows.length; i++) {
-              let object =  objects.rows.item(i);
-              for(let propertyName in entityConfig.properties){
-                let propertyConfig = entityConfig.properties[propertyName];
-                switch(propertyConfig.type){
-                  case 'join':
-                    if(object[propertyName + '_id']) {
-                      object[propertyName] = {
-                        'id': object[propertyName + '_id']
-                      };
-                    }else{
-                      object[propertyName] = null;
-                    }
-                    delete object[propertyName + '_id'];
-                    break;
-                  case 'multijoin':
-                  case 'multifile':
-                    if(objectCombined){
-                      if(!objectCombined[propertyName]){
-                        objectCombined[propertyName] = [];
-                      }
-                      objectCombined[propertyName].push({'id': object[propertyName]});
-                      object[propertyName] = objectCombined[propertyName];
-                    }else{
-                      object[propertyName] = [{
-                        'id': object[propertyName]
-                      }];
-                    }
-                    break;
-                  case 'checkbox':
-                  case 'boolean':
-                    object[propertyName] = object[propertyName] == 1 ? true : false;
-                  default:
-                    break;
-                }
-              }
-
-              if(object['_hashLocal']){
-                delete object['_hashLocal'];
-              }
-
-
-              objectCombined = object;
-            }
-
-            resolve(objectCombined);
-
-          } else{
-            reject({code: 404, error : 'Keine Datensätze vorhanden.'});
-          }
-        }).catch((error) => {
-          reject({code: 500, error: error});
-        });
-      }).catch((error) => {
-        reject({code: 500, error: error});
-      });
-    });
-
-    return promise;
-  }
-
-
-  update(entityName : string, data : {}, disableQueueing : boolean = false){
-    var promise = new Promise<string>((resolve, reject) => {
-
-      this.db().then((db) => {
-        let entityConfig = this.schema.data[entityName];
-        if (!entityConfig) {
-          this.logger.error("store.update::" + entityName + ": nicht vorhanden", data);
-          return;
-        }
-
-        if (!data['id']) {
-          this.logger.error("store.update::" + entityName + ": keine ID übergeben", data);
-          reject('Keine ID übergeben.');
-          return;
-        }
-
-        let dbName = entityConfig.settings.dbname;
-        let updateStmt = [];
-        let params = [];
-        let joins : any[] = [];
-        for (let propName in data) {
-          propName = propName.replace('_id', '');
-
-          let propConfig = entityConfig.properties[propName];
-          if (!propConfig) continue;
-
-          switch(propConfig['type']){
-            case 'datetime':
-              if(data[propName] == 'NOW()'){
-                updateStmt.push("`" + propName + "` = datetime('now')");
-
-              }else{
-                updateStmt.push("`" + propName + "` = ?");
-                params.push(data[propName]);
-              }
-              break;
-            case 'multifile':
-              var joinedTableNameMF   = propConfig.foreign ? propConfig.foreign :  propConfig.dbName + "_" + propName;
-              var statements : any[]  = [];
-              var joinedField         = dbName.replace('_', '') + '_id';
-              statements.push(["DELETE FROM `" + joinedTableNameMF + "` WHERE `" + joinedField + "` = ?", [data['id']]]);
-
-              if(data[propName]){
-                for(let file of data[propName]){
-                  var file_id = (file === Object(file)) ? file['id'] : file;
-                  statements.push(["INSERT INTO `" + joinedTableNameMF + "` (`" + joinedField + "`, `file_id`) VALUES(?, ?)", [data['id'], file_id]]);
-                  joins.push({entity_name : 'PIM\\File', entity_id: file_id});
-                }
-              }
-              db.sqlBatch(statements).then(() => {
-                
-              }).catch((error) => {
-                this.logger.error('store:update:multifile', error);
-              });
-              break;
-              //@todo: multijoin
+          switch(propertyConfig.type){
             case 'join':
-            case 'file':
-              propName = propName + '_id';
-              updateStmt.push("`" + propName + "` = ?");
-              params.push(data[propName]);
-
-              let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
-              joins.push({entity_name : joinedEntity, entity_id: data[propName]});
-
+              if(object[propertyName + '_id']) {
+                object[propertyName] = {
+                  'id': object[propertyName + '_id']
+                };
+              }else{
+                object[propertyName] = null;
+              }
+              delete object[propertyName + '_id'];
+              break;
+            case 'multijoin':
+            case 'multifile':
+              if(objectCombined){
+                if(!objectCombined[propertyName]){
+                  objectCombined[propertyName] = [];
+                }
+                objectCombined[propertyName].push({'id': object[propertyName]});
+                object[propertyName] = objectCombined[propertyName];
+              }else{
+                object[propertyName] = [{
+                  'id': object[propertyName]
+                }];
+              }
               break;
             case 'checkbox':
             case 'boolean':
-              data[propName] = this.boolVal2Int(data[propName]);
-              updateStmt.push("`" + propName + "` = ?");
-              params.push(data[propName]);
-              break;
+              object[propertyName] = object[propertyName] == 1 ? true : false;
             default:
-              updateStmt.push("`" + propName + "` = ?");
-              params.push(data[propName]);
               break;
           }
-
         }
 
-        //@todo: modified_time
+        if(object['_hashLocal']){
+          delete object['_hashLocal'];
+        }
 
-        params.push(data['id']);
 
-        let statement = "" +
-          "UPDATE `" + dbName + "` " +
-          "SET " + updateStmt.join(", ") +
-          "WHERE id = ?";
-        db.executeSql(statement, params).then(() => {
-          this.logger.info("store.update::" + entityName + ": gespeichert", data);
-          if(!disableQueueing) this.insertQueue(entityName, data['id'], QueueType.updated, joins);
-          resolve(data['id']);
-        }).catch((error) => {
-          this.logger.error("store.update(1)::" + entityName, error);
-          reject("Fehler beim Speichern.");
-        })
+        objectCombined = object;
+      }
 
-      }).catch((error) =>{
-        this.logger.error("store.update(2)::" + entityName, error);
-        reject("Fehler beim Speichern.");
-      })
+      return Promise.resolve(objectCombined);
+
+    }).catch((error) => {
+      this.logger.error('[store.single]', error);
+      return Promise.reject({code: 500, error: error});
     });
 
     return promise;
   }
 
-  updateSchema(schema: Schema){
-    this.schema = schema;
+  /**
+   * Aktualisieren eines Datensatzes einer Entität
+   * @param {string} entityName
+   * @param {{}} data
+   * @param {boolean} disableQueueing
+   * @returns {Promise<any>}
+   */
+  public update(entityName : string, data : {}, disableQueueing : boolean = false){
 
-    var promise = new Promise((resolve, reject) => {
-      this.db().then((db) => {
+    let entityConfig  = this.schema.data[entityName];
+    let joins : any[] = [];
 
-        let statementQueue = "" +
-          "CREATE TABLE IF NOT EXISTS `queue` (" +
-          "  `id` TEXT PRIMARY KEY NOT NULL," +
-          "  `entity` TEXT NOT NULL," +
-          "  `entity_id` TEXT NOT NULL," +
-          "  `joins` TEXT NULL, " +
-          "  `created` TEXT NOT NULL," +
-          "  `mode` TEXT NOT NULL," +
-          "  `syncErrors` INTEGER NOT NULL" +
-          ")";
-        db.executeSql(statementQueue, []);
+    let promise = this.db().then((db) => {
+      //Datenbank wurde geöffnet
 
-        let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
-        let entitiedCreated  = 0;
+      if (!entityConfig) {
+        this.logger.error("store.update::" + entityName + ": nicht vorhanden", data);
+        return Promise.reject("store.update::" + entityName + ": nicht vorhanden");
+      }
 
-        if(!this.schema.oldData) {
-          for (let key in schema.data) {
-            if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
-            this.logger.info("SYNC store.updateSchema CREATE ", key);
-            let entityConfig: any = schema.data[key];
+      if (!data['id']) {
+        this.logger.error("store.update::" + entityName + ": keine ID übergeben", data);
+        return Promise.reject('Keine ID übergeben.');
+      }
 
-            this.createTableForEntity(db, entityConfig).then(() => {
-              entitiedCreated++;
-              if (entitiedCreated == entitiesToCreate) {
-                resolve();
-              }
-            }).catch((error) => {
-              reject(error);
-            });
+      let dbName = entityConfig.settings.dbname;
+      let updateStmt = [];
+      let params = [];
 
+      var statements : any[]  = [];
 
-          }
-        }else{
-          for (let key in schema.data) {
-            if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
+      for (let propName in data) {
+        propName = propName.replace('_id', '');
 
-            let entityConfig: any = schema.data[key];
+        let propConfig = entityConfig.properties[propName];
+        if (!propConfig) continue;
 
-            if (!schema.oldData[key]) {
-              this.logger.info("SYNC store.updateSchema CREATE ", key);
-              this.createTableForEntity(db, entityConfig).then(() => {
-                entitiedCreated++;
-                if (entitiedCreated == entitiesToCreate) {
-                  resolve();
-                }
-              }).catch((error) => {
-                reject(error);
-              });
+        switch(propConfig['type']){
+          case 'datetime':
+            if(data[propName] == 'NOW()'){
+              updateStmt.push("`" + propName + "` = datetime('now')");
 
-            } else {
-
-              let entityOldConfig: any  = schema.oldData[key];
-              this.logger.info("SYNC store.updateSchema UPDATE", key);
-              this.alterTableForEntity(db, entityConfig, entityOldConfig).then(() => {
-                entitiedCreated++;
-                if (entitiedCreated == entitiesToCreate) {
-                  resolve();
-                }
-              }).catch((error) => {
-                reject(error);
-              });
+            }else{
+              updateStmt.push("`" + propName + "` = ?");
+              params.push(data[propName]);
             }
+            break;
+          case 'multifile':
+            var joinedTableNameMF   = propConfig.foreign ? propConfig.foreign :  propConfig.dbName + "_" + propName;
+
+            var joinedField         = dbName.replace('_', '') + '_id';
+            statements.push(["DELETE FROM `" + joinedTableNameMF + "` WHERE `" + joinedField + "` = ?", [data['id']]]);
+
+            if(data[propName]){
+              for(let file of data[propName]){
+                var file_id = (file === Object(file)) ? file['id'] : file;
+                statements.push(["INSERT INTO `" + joinedTableNameMF + "` (`" + joinedField + "`, `file_id`) VALUES(?, ?)", [data['id'], file_id]]);
+                joins.push({entity_name : 'PIM\\File', entity_id: file_id});
+              }
+            }
+
+          //@todo: multijoin
+          case 'join':
+          case 'file':
+            propName = propName + '_id';
+            updateStmt.push("`" + propName + "` = ?");
+            params.push(data[propName]);
+
+            let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
+            joins.push({entity_name : joinedEntity, entity_id: data[propName]});
+
+            break;
+          case 'checkbox':
+          case 'boolean':
+            data[propName] = this.boolVal2Int(data[propName]);
+            updateStmt.push("`" + propName + "` = ?");
+            params.push(data[propName]);
+            break;
+          default:
+            updateStmt.push("`" + propName + "` = ?");
+            params.push(data[propName]);
+            break;
+        }
+
+      }
+      //@todo: modified_time
+      params.push(data['id']);
+
+      let statement = "" +
+        "UPDATE `" + dbName + "` " +
+        "SET " + updateStmt.join(", ") +
+        "WHERE id = ?";
+
+      statements.push([statement, params]);
+
+      return db.sqlBatch(statements);
+
+    }).then(() => {
+      //Datensatz wurde aktualisiert
+
+      this.logger.info("store.update::" + entityName + ": gespeichert", data);
+      if(!disableQueueing) this.insertQueue(entityName, data['id'], QueueType.updated, joins);
+
+      return Promise.resolve(data['id']);
+    }).catch((error) =>{
+      this.logger.error("store.update(2)::" + entityName, error);
+      return Promise.reject(error);
+    });
+
+    return promise;
+  }
+
+  /**
+   * Führt ein Update des Datenbank-Schemas aus
+   * @param {Schema} schema
+   * @returns {Promise<[any]>}
+   */
+  public updateSchema(schema: Schema){
+    this.schema   = schema;
+    let promises  = [];
+    let db        = null;
+
+    let promise = this.db().then((db) => {
+      //Datenbank wurde geöffnet
+
+      let statementQueue = "" +
+        "CREATE TABLE IF NOT EXISTS `queue` (" +
+        "  `id` TEXT PRIMARY KEY NOT NULL," +
+        "  `entity` TEXT NOT NULL," +
+        "  `entity_id` TEXT NOT NULL," +
+        "  `joins` TEXT NULL, " +
+        "  `created` TEXT NOT NULL," +
+        "  `mode` TEXT NOT NULL," +
+        "  `syncErrors` INTEGER NOT NULL" +
+        ")";
+      return db.executeSql(statementQueue, []);
+
+    }).then(() => {
+      //Tabelle Queue wurde erstellt oder ist bereits vorhanden
+
+      let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
+      let entitiedCreated  = 0;
+
+      if(!this.schema.oldData) {
+        for (let key in schema.data) {
+          if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
+          this.logger.info("SYNC store.updateSchema CREATE ", key);
+          let entityConfig: any = schema.data[key];
+
+          promises.push(this.createTableForEntity(db, entityConfig));
+
+        }
+      }else{
+        for (let key in schema.data) {
+          if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
+
+          let entityConfig: any = schema.data[key];
+
+          if (!schema.oldData[key]) {
+            this.logger.info("SYNC store.updateSchema CREATE ", key);
+            promises.push(this.createTableForEntity(db, entityConfig));
+
+          } else {
+
+            let entityOldConfig: any  = schema.oldData[key];
+            this.logger.info("SYNC store.updateSchema UPDATE", key);
+            promises.push(this.alterTableForEntity(db, entityConfig, entityOldConfig));
           }
         }
-      }).catch(() => {
-        reject("APP-CMS: Cannot create/access database.");
-      });
+      }
+
+      return Promise.all(promises);
     });
 
     return promise;
