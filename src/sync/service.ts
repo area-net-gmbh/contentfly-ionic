@@ -1,5 +1,4 @@
 import {Injectable} from "@angular/core";
-import {BehaviorSubject} from "rxjs/BehaviorSubject";
 import {Message} from "./message";
 import {Store} from "../data/store";
 import {QueueType} from "../data/queuetype";
@@ -11,6 +10,8 @@ import {Api} from "../api/api";
 import {Logger} from "../helper/logger";
 import {File} from "@ionic-native/file";
 import {Uploader} from "./uploader";
+import {BehaviorSubject} from "rxjs/BehaviorSubject";
+import { Observable } from "rxjs/Observable";
 
 
 @Injectable()
@@ -87,7 +88,7 @@ export class Service {
       } else {
         return Promise.resolve();
       }
-    }).then(() => {
+    }).then((data) => {
       //Schema-Update wurde durchgeführt, oder nur Anzahl der Datensätze gespeichert
 
       this.dataCount        = countRequest['data']['dataCount'];
@@ -96,7 +97,7 @@ export class Service {
       if(this.dataCount == 0){
         this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
         this.logger.info("Keine neuen Daten vorhanden.");
-        return Promise.resolve();
+        return Promise.resolve([]);
       }
 
       let entities : any[] = [];
@@ -194,7 +195,7 @@ export class Service {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if(!files.length){
-        return Promise.resolve();
+        return Promise.resolve([]);
       }
 
       this.dataCount        = files.length;
@@ -305,11 +306,11 @@ export class Service {
         this.syncState.save();
 
         //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-        return Promise.resolve();
+        return Promise.resolve([]);
       }
     }).catch((error) => {
       this.logger.error('[sync.service->syncMultijoinFromEntity] api/query', error);
-      return Promise.resolve();
+      return Promise.resolve([]);
     });
   }
 
@@ -369,11 +370,11 @@ export class Service {
           this.syncState.save();
 
           //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-          return Promise.resolve();
+          return Promise.resolve([]);
         }
       }).catch((error) => {
         this.logger.error('[sync.service->syncFromEntity] api/query', error);
-        return Promise.resolve();
+        return Promise.resolve([]);
       });
   }
 
@@ -389,7 +390,7 @@ export class Service {
       //Zu synchronisierende Datensätze wurden ermittelt
 
       if (!objects || !objects.length) {
-        return [];
+        return Promise.resolve([]);
       }
 
       let objectsToSync: any[] = [];
@@ -457,7 +458,7 @@ export class Service {
       }
 
       if(!objectsToSync.length){
-        return Promise.resolve();
+        return Promise.resolve([]);
       }
 
       //Hochladen der Datensätze auf den Sever starten

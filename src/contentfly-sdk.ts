@@ -11,6 +11,8 @@ import {Storage} from "@ionic/storage";
 import {Events} from "ionic-angular";
 import {File} from "@ionic-native/file";
 import {Service} from "./sync/service";
+import {Message} from "./sync/message";
+import {ApiResponse} from "./api/response.interface";
 
 @Injectable()
 export class ContentflySdk {

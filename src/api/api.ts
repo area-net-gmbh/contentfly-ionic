@@ -18,6 +18,7 @@ export class Api {
    * Aufruf der FileGet-API
    * @param {string} id
    * @param {string} size
+   * @returns {Promise<Blob>}
    */
   public file(id : string, size : string = null){
     let sizeParam = '';
@@ -26,7 +27,7 @@ export class Api {
     }
 
 
-    this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).toPromise();
+    return this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).toPromise();
   }
 
   /**

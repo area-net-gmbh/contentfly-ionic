@@ -139,7 +139,7 @@ export class Store {
           case "multifile":
             var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
             var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `file_id`))";
-            db.executeSql(sqlMF, {})
+            db.executeSql(sqlMF, [])
               .then(() => {
               })
               .catch(e => {
@@ -159,7 +159,7 @@ export class Store {
             var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
             var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `" + joinedEntityDbname.replace('_', '') + "_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `" + joinedEntityDbname.replace('_', '') + "_id`))";
 
-            db.executeSql(sql, {})
+            db.executeSql(sql, [])
               .then(() => {
               })
               .catch(e => {
@@ -193,7 +193,7 @@ export class Store {
       createTableString += propertiesCreateStatement.join(", ");
       createTableString += ")";
 
-      db.executeSql(createTableString, {})
+      db.executeSql(createTableString, [])
         .then(() => {
           resolve();
         })

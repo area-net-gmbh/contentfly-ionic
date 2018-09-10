@@ -124,12 +124,12 @@ export class Uploader {
                 delete this.joinedObjects[object.entity_id];
                 return this.start(api, newObjectsToSync);
               } else {
-                return Promise.resolve();
+                return Promise.resolve([]);
               }
             }
           }).catch((error) => {
             this.logger.error('[uploader.start] fileupload ', error);
-            return Promise.resolve();
+            return Promise.resolve([]);
           });
 
           promises.push(p);
@@ -155,7 +155,7 @@ export class Uploader {
                 delete this.joinedObjects[object.entity_id];
                 return this.start(api, newObjectsToSync);
               }else{
-                return Promise.resolve();
+                return Promise.resolve([]);
               }
             }
           }).catch((error) => {
