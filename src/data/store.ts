@@ -88,10 +88,10 @@ export class Store {
 
   /**
    * Ausführen von mehreren SQL-Kommandoes im Batch-Modus
-   * @param {string[]} commands
+   * @param {any[]} commands
    * @returns {Promise<SQLiteObject>}
    */
-  public batch(commands : string[]){
+  public batch(commands : any[]){
     let promise = this.db().then((db) => {
       return db.sqlBatch(commands);
     });

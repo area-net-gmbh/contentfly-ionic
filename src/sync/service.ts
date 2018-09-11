@@ -28,6 +28,32 @@ export class Service {
   }
 
   /**
+   * Löscht mehrere Datensätze
+   * @param {any[]} objetcs [{entity_name = '..', entity_id = '...'}]
+   * @returns {any}
+   */
+  private deleteObjects(objetcs : any[]){
+    if(objetcs.length == 0){
+      return Promise.resolve();
+    }
+
+    let sqlSatements : any[] = [];
+    for(let object of objetcs){
+      let entity  = object['entity_name'];
+      let id      = object['entity_id'];
+
+      let entityConfig = this.schema.data[entity];
+      if(!entityConfig){
+        continue;
+      }
+
+      sqlSatements.push(['DELETE FROM ' + entityConfig.settings.dbname + ' WHERE id = ? LIMIT 1', [id]]);
+    }
+
+    return this.store.batch(sqlSatements).catch((error) => { return Promise.resolve()});
+  }
+
+  /**
    * Gibt den Synchronisations-Prozess zurück
    * @returns {Observable<Message>}
    */
@@ -303,9 +329,15 @@ export class Service {
       params = {lastModified: countParams};
     }
 
-    let countRequest : any = null;
+    let countRequest : any      = null;
+    let deletedObjects : any[]  = [];
 
-    return this.api.post('count', params).then((countRequestFromPromise) => {
+    return this.api.post('deleted', params).then((deletedObjectsFromPromise) => {
+      //Gelöschte Objekte wurden ausgelesen
+      deletedObjects = deletedObjectsFromPromise['data'] ? deletedObjectsFromPromise['data'] : [];
+
+      return this.api.post('count', params);
+    }).then((countRequestFromPromise) => {
       //Anzahl der geänderten Datensätze wurde ermittelt, gegebenenfalls wird Update des Schemas durchgeführt
 
       countRequest = countRequestFromPromise;
@@ -321,7 +353,9 @@ export class Service {
       this.dataCount        = countRequest['data']['dataCount'];
       this.currentDataCount = 0;
 
-      if(this.dataCount == 0){
+      this.logger.info('[service.startSyncFrom] deletec/changed', this.dataCount  + '/' + deletedObjects.length);
+
+      if(this.dataCount == 0 && deletedObjects.length == 0){
         this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
         this.logger.info("Keine neuen Daten vorhanden.");
         return Promise.resolve([]);
@@ -379,8 +413,13 @@ export class Service {
 
       }
 
-      //[CODE_SYNCFROM_PARALLEL] Parallele Synchronisierung der Datensätze pro Enität
+      //[CODE_SYNCFROM_PARALLEL] Parallele Synchronisierung der Datensätze pro Entität
       var allPromises = [];
+
+      if(deletedObjects.length){
+        allPromises.push(this.deleteObjects(deletedObjects));
+      }
+
       for (let index in entities) {
         var entity      = entities[index];
         var key         = entity['key'];
