@@ -140,7 +140,7 @@ export class Uploader {
 
             objectComplete = data;
             let params = {entity: object.entity, id: object.entity_id, data: objectComplete};
-            
+
             return api.post('replace', params);
           }).then((data) => {
             //Datensatz wurde auf dem Server synchronsiert
