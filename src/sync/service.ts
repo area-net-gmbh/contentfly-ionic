@@ -353,7 +353,7 @@ export class Service {
       this.dataCount        = countRequest['data']['dataCount'];
       this.currentDataCount = 0;
 
-      this.logger.info('[service.startSyncFrom] deletec/changed', this.dataCount  + '/' + deletedObjects.length);
+      this.logger.info('[service.startSyncFrom] changed/deleted', this.dataCount  + '/' + deletedObjects.length);
 
       if(this.dataCount == 0 && deletedObjects.length == 0){
         this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
@@ -420,25 +420,27 @@ export class Service {
         allPromises.push(this.deleteObjects(deletedObjects));
       }
 
-      for (let index in entities) {
-        var entity      = entities[index];
-        var key         = entity['key'];
-        var entityName  = entity['entityName'];
-        var isMultijoin = entity['isMultijoin'];
+      if(this.dataCount) {
+        for (let index in entities) {
+          var entity = entities[index];
+          var key = entity['key'];
+          var entityName = entity['entityName'];
+          var isMultijoin = entity['isMultijoin'];
 
-        var lastSyncDate   = this.syncState.getLastSyncDate(entityName);
+          var lastSyncDate = this.syncState.getLastSyncDate(entityName);
 
-        if(!isMultijoin) {
-          let startFromChunK = this.syncState.getLastChunkSize(entityName);
+          if (!isMultijoin) {
+            let startFromChunK = this.syncState.getLastChunkSize(entityName);
 
-          allPromises.push(this.syncFromEntity(entityName, lastSyncDate, startFromChunK));
-        }else{
-          let startFromChunK = this.syncState.getLastChunkSize(key);
+            allPromises.push(this.syncFromEntity(entityName, lastSyncDate, startFromChunK));
+          } else {
+            let startFromChunK = this.syncState.getLastChunkSize(key);
 
-          allPromises.push(this.syncMultijoinFromEntity(key, entityName, entity['entityProperty'], entity['srcTableName'], entity['srcJoinField'], entity['destTableName'],  lastSyncDate, startFromChunK));
+            allPromises.push(this.syncMultijoinFromEntity(key, entityName, entity['entityProperty'], entity['srcTableName'], entity['srcJoinField'], entity['destTableName'], lastSyncDate, startFromChunK));
+          }
         }
       }
-
+      
       return Promise.all(allPromises);
 
     }).then(() => {
