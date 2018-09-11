@@ -88,6 +88,11 @@ export class Uploader {
           return this.store.query('DELETE FROM queue WHERE entity_id = ? ', [object.entity_id]);
         }).catch((error) => {
           this.logger.error('[uploader.start] api->delete', error);
+
+          if(error.code = 404){
+            this.store.query('DELETE FROM queue WHERE id = ?', [object.id]).then().catch();
+          }
+
           return Promise.resolve();
         });
 
