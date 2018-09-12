@@ -8,7 +8,6 @@ import {SyncState} from "./sync/syncstate";
 import {Observable} from "rxjs/Observable";
 import {Logger} from "./helper/logger";
 import {Storage} from "@ionic/storage";
-import {Events} from "ionic-angular";
 import {File} from "@ionic-native/file";
 import {Service} from "./sync/service";
 import {Message} from "./sync/message";
@@ -19,7 +18,7 @@ export class ContentflySdk {
 
   private forceSyncTo : boolean = true;
 
-  constructor(private api : Api, private events : Events, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
+  constructor(private api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
     this.api.setUser(this.user);
     this.store.setUser(this.user);
 
@@ -117,11 +116,19 @@ export class ContentflySdk {
 
 
   /**
-   * Rückgabe des letzten Synchronisieruns-Datum
+   * Rückgabe des letzten Synchronisieruns-Datum vom Server
    * @returns {string}
    */
   lastSyncDate(){
     return this.syncState.getLastSyncDate('PIM\\User');
+  }
+
+  /**
+   * Rückgabe des letzten Synchronisieruns-Datum zum Server
+   * @returns {string}
+   */
+  lastSyncToDate(){
+    return this.syncState.getLastSyncToDate();
   }
 
   /**

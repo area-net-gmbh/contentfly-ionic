@@ -20,6 +20,10 @@ export class SyncState {
     return this.get(entityName, 'ts', null);
   }
 
+  getLastSyncToDate(){
+    return this.data['tsto'] ? this.data['tsto'] : null;
+  }
+  
   getLastChunkSize(entityName : string) : number{
     return this.get(entityName, 'chunk', 0);
   }
@@ -30,6 +34,10 @@ export class SyncState {
 
   setLastSyncDate(entityName : string, ts : string){
     this.set(entityName, 'ts', ts);
+  }
+
+  setLastSyncToDate(ts : string){
+    this.data['tsto'] = ts;
   }
 
   setLastChunkSize(entityName : string, chunk : number){

@@ -3,7 +3,11 @@ import {Message} from "./message";
 import {Store} from "../data/store";
 import {QueueType} from "../data/queuetype";
 import {Mode} from "./mode";
-import {ENTITIES_TO_EXCLUDE, SYNC_CHUNK_SIZE} from "../constants";
+import {
+  CONTENTFLY_SYNC_START, CONTENTFLY_SYNC_SUCCESS,
+  ENTITIES_TO_EXCLUDE,
+  SYNC_CHUNK_SIZE
+} from "../constants";
 import {Schema} from "../data/schema";
 import {SyncState} from "./syncstate";
 import {Api} from "../api/api";
@@ -12,6 +16,7 @@ import {File} from "@ionic-native/file";
 import {Uploader} from "./uploader";
 import {BehaviorSubject} from "rxjs/BehaviorSubject";
 import { Observable } from "rxjs/Observable";
+import {Events} from "ionic-angular";
 
 
 @Injectable()
@@ -23,34 +28,8 @@ export class Service {
   private data : BehaviorSubject<Message>   = null;
   private isSyncing : boolean               = false;
 
-  constructor(private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
+  constructor(private events : Events, private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
 
-  }
-
-  /**
-   * Löscht mehrere Datensätze
-   * @param {any[]} objetcs [{entity_name = '..', entity_id = '...'}]
-   * @returns {any}
-   */
-  private deleteObjects(objetcs : any[]){
-    if(objetcs.length == 0){
-      return Promise.resolve();
-    }
-
-    let sqlSatements : any[] = [];
-    for(let object of objetcs){
-      let entity  = object['entity_name'];
-      let id      = object['entity_id'];
-
-      let entityConfig = this.schema.data[entity];
-      if(!entityConfig){
-        continue;
-      }
-
-      sqlSatements.push(['DELETE FROM ' + entityConfig.settings.dbname + ' WHERE id = ? LIMIT 1', [id]]);
-    }
-
-    return this.store.batch(sqlSatements).catch((error) => { return Promise.resolve()});
   }
 
   /**
@@ -250,6 +229,7 @@ export class Service {
           //Datensätze vorhanden und in Datenbank importieren
 
           var promise = new Promise((resolve, reject) => {
+            //Todo: Deleted Objects from Entity as Param
             this.store.import(entityName, data).subscribe(
               () => {
                 this.currentDataCount++;
@@ -297,21 +277,27 @@ export class Service {
    */
   private startSync(){
     this.isSyncing  = true;
+    this.events.publish(CONTENTFLY_SYNC_START, null);
 
     this.startSyncTo().then(() => {
       return this.startSyncFrom();
     }).then(() => {
+      this.logger.info('[service.startSyncFrom]', 'finished');
+      this.isSyncing = false;
+      this.data.complete();
+    }).catch((error) => {
+      this.logger.error('[service.startSync]', error);
       this.isSyncing = false;
       this.data.complete();
     });
   }
-
 
   /**
    * Startet Synchronisations-Prozess vom Server
    * @returns {Promise<void>}
    */
   private startSyncFrom(){
+    this.logger.info("[service.startSyncFrom]");
 
     this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...'));
     let countParams: {} = {};
@@ -324,17 +310,29 @@ export class Service {
       }
     }
 
-    let params = {};
+    let startPromise  = null;
+    let params        = {};
+
     if (Object.keys(countParams).length) {
       params = {lastModified: countParams};
+      startPromise = this.api.post('deleted', params);
+    }else{
+      startPromise = Promise.resolve(null);
     }
 
-    let countRequest : any      = null;
-    let deletedObjects : any[]  = [];
+    let countRequest : any   = null;
 
-    return this.api.post('deleted', params).then((deletedObjectsFromPromise) => {
-      //Gelöschte Objekte wurden ausgelesen
-      deletedObjects = deletedObjectsFromPromise['data'] ? deletedObjectsFromPromise['data'] : [];
+    return startPromise.then((deletedObjectsFromPromise) => {
+      //Gelöschte Objekte wurden ausgelesen, oder beim Start übersprungen
+
+      if(deletedObjectsFromPromise && deletedObjectsFromPromise['data'] && deletedObjectsFromPromise['data'].length > 0){
+        this.data.next(new Message(Mode.FROM, 'Datenbank bereinigen...', 0, 0, 0));
+        return this.store.deleteObjects(deletedObjectsFromPromise['data']);
+      }else{
+        return Promise.resolve()
+      }
+    }).then(() => {
+      //Alte Datensätze wurden gelöscht
 
       return this.api.post('count', params);
     }).then((countRequestFromPromise) => {
@@ -353,9 +351,7 @@ export class Service {
       this.dataCount        = countRequest['data']['dataCount'];
       this.currentDataCount = 0;
 
-      this.logger.info('[service.startSyncFrom] changed/deleted', this.dataCount  + '/' + deletedObjects.length);
-
-      if(this.dataCount == 0 && deletedObjects.length == 0){
+      if(this.dataCount == 0){
         this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
         this.logger.info("Keine neuen Daten vorhanden.");
         return Promise.resolve([]);
@@ -416,31 +412,28 @@ export class Service {
       //[CODE_SYNCFROM_PARALLEL] Parallele Synchronisierung der Datensätze pro Entität
       var allPromises = [];
 
-      if(deletedObjects.length){
-        allPromises.push(this.deleteObjects(deletedObjects));
+      if(this.dataCount == 0){
+        return Promise.resolve();
       }
 
-      if(this.dataCount) {
-        for (let index in entities) {
-          var entity = entities[index];
-          var key = entity['key'];
-          var entityName = entity['entityName'];
-          var isMultijoin = entity['isMultijoin'];
+      for (let index in entities) {
+        var entity = entities[index];
+        var key = entity['key'];
+        var entityName = entity['entityName'];
+        var isMultijoin = entity['isMultijoin'];
 
-          var lastSyncDate = this.syncState.getLastSyncDate(entityName);
+        var lastSyncDate = this.syncState.getLastSyncDate(entityName);
 
-          if (!isMultijoin) {
-            let startFromChunK = this.syncState.getLastChunkSize(entityName);
+        if (!isMultijoin) {
+          let startFromChunK = this.syncState.getLastChunkSize(entityName);
+          allPromises.push(this.syncFromEntity(entityName, lastSyncDate, startFromChunK));
+        } else {
+          let startFromChunK = this.syncState.getLastChunkSize(key);
 
-            allPromises.push(this.syncFromEntity(entityName, lastSyncDate, startFromChunK));
-          } else {
-            let startFromChunK = this.syncState.getLastChunkSize(key);
-
-            allPromises.push(this.syncMultijoinFromEntity(key, entityName, entity['entityProperty'], entity['srcTableName'], entity['srcJoinField'], entity['destTableName'], lastSyncDate, startFromChunK));
-          }
+          allPromises.push(this.syncMultijoinFromEntity(key, entityName, entity['entityProperty'], entity['srcTableName'], entity['srcJoinField'], entity['destTableName'], lastSyncDate, startFromChunK));
         }
       }
-      
+
       return Promise.all(allPromises);
 
     }).then(() => {
@@ -452,6 +445,7 @@ export class Service {
 
       return this.syncFiles().then(() => {
         this.data.next(new Message(Mode.FROM, 'Daten wurden erfolgreich synchronisiert.', 0, 0, 0));
+        this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
         return Promise.resolve();
       });
     });
@@ -463,6 +457,7 @@ export class Service {
    * @returns {Promise<any[]>}
    */
   private startSyncTo(){
+    this.logger.info("[service.startSyncTo]", "started");
     this.data  = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
 
     let statement = "" +
@@ -482,6 +477,7 @@ export class Service {
       let lastObject: any = null;
       let lastIsInserted: boolean = false;
       let allJoinedObjects: number = 0;
+
 
       //Datensätze mit Joins ermitteln und extrahieren
       for (let object of objects) {
@@ -541,13 +537,25 @@ export class Service {
         }
       }
 
+
       if(!objectsToSync.length){
         return Promise.resolve([]);
       }
 
       //Hochladen der Datensätze auf den Sever starten
       this.uploader.init(allJoinedObjects + objectsToSync.length, joinedObjectsToSync);
-      return this.uploader.start(this.api, objectsToSync);
+      return this.uploader.start(this.api, objectsToSync).then((data) => {
+        this.logger.info("[service.startSyncTo]", "finished");
+
+        let d           = new Date();
+        let datestring  = d.getFullYear() + '-' + ("0"+(d.getMonth()+1)).slice(-2) + '-' + ("0" + d.getDate()).slice(-2) + ' ' + ("0" + d.getHours()).slice(-2) + ':' + ("0" + d.getMinutes()).slice(-2) + ':' + ("0" + d.getSeconds()).slice(-2)
+
+        this.syncState.setLastSyncToDate(datestring);
+        this.syncState.save();
+        return Promise.resolve([]);
+      });
+    }).catch((error) => {
+      this.logger.info('[store.startSyncTo]', error);
     });
   }
 

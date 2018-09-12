@@ -239,9 +239,10 @@ export class Store {
    * Löscht einen Datensatz einer Entität
    * @param {string} entityName
    * @param {string} id
+   * @param {boolean} noQueueing
    * @returns {Promise<void>}
    */
-  public delete(entityName : string, id : string){
+  public delete(entityName : string, id : string, noQueueing : boolean = false){
     let promise = this.db().then((db) => {
       let entityConfig = this.schema.data[entityName];
       if (!entityConfig) {
@@ -254,7 +255,7 @@ export class Store {
 
       return db.executeSql(statement, [id]).then(() => {
         this.logger.info("store.delete::" + entityName, id);
-        this.insertQueue(entityName, id, QueueType.deleted);
+        if(!noQueueing) this.insertQueue(entityName, id, QueueType.deleted);
         return Promise.resolve();
       }).catch((error) => {
         this.logger.error("store.delete::" + entityName + ":" +id, error);
@@ -263,6 +264,28 @@ export class Store {
     });
 
     return promise;
+  }
+
+  /**
+   * LÖscht Objekte aus Rückgabe von api/deleted
+   * @param {any[]} objects
+   * @returns {Promise<any>}
+   */
+  public deleteObjects(objects : any[]) {
+
+    let promises = [];
+
+    for (let object of objects) {
+      let model_name = object['model_name'];
+      let model_id = object['model_id'];
+
+      let p = this.delete(model_name, model_id, true).catch((error) => {
+        return Promise.resolve();
+      });
+      promises.push(p);
+    }
+
+    return Promise.all(promises);
   }
 
   /**
