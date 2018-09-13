@@ -84,6 +84,7 @@ export class Uploader {
 
     for(let object of objects){
       if(object.mode == QueueType.deleted){
+        this.logger.info("[upload.start] delete", object.entity + ':' + object.entity_id);
         let p = api.post('delete', {entity: object.entity, id: object.entity_id}).then(() => {
           return this.store.query('DELETE FROM queue WHERE entity_id = ? ', [object.entity_id]);
         }).catch((error) => {
@@ -101,6 +102,7 @@ export class Uploader {
         let objectComplete = null;
 
         if(object.entity == 'PIM\\File') {
+          this.logger.info("[upload.start] file", object.entity + ':' + object.entity_id);
           let p = this.store.single(object.entity, object.entity_id).then((data) => {
             //Details zu Datensatz wurden geladen
 
@@ -139,7 +141,7 @@ export class Uploader {
 
           promises.push(p);
         }else{
-
+          this.logger.info("[upload.start] replace", object.entity + ':' + object.entity_id);
           let p = this.store.single(object.entity, object.entity_id).then((data) => {
             //Details zu Datensatz wurden geladen
 

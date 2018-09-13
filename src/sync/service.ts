@@ -297,7 +297,7 @@ export class Service {
    * @returns {Promise<void>}
    */
   private startSyncFrom(){
-    this.logger.info("[service.startSyncFrom]");
+    this.logger.info("[service.startSyncFrom]", "started");
 
     this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...'));
     let countParams: {} = {};
@@ -313,6 +313,7 @@ export class Service {
     let startPromise  = null;
     let params        = {};
 
+
     if (Object.keys(countParams).length) {
       params = {lastModified: countParams};
       startPromise = this.api.post('deleted', params);
@@ -326,6 +327,7 @@ export class Service {
       //Gelöschte Objekte wurden ausgelesen, oder beim Start übersprungen
 
       if(deletedObjectsFromPromise && deletedObjectsFromPromise['data'] && deletedObjectsFromPromise['data'].length > 0){
+        this.logger.info("[service.startSyncFrom] delete", deletedObjectsFromPromise['data'].length + ' objects');
         this.data.next(new Message(Mode.FROM, 'Datenbank bereinigen...', 0, 0, 0));
         return this.store.deleteObjects(deletedObjectsFromPromise['data']);
       }else{
@@ -416,6 +418,7 @@ export class Service {
         return Promise.resolve();
       }
 
+      this.logger.info("[service.startSyncFrom] import", this.dataCount + 'objects');
       for (let index in entities) {
         var entity = entities[index];
         var key = entity['key'];
@@ -478,6 +481,7 @@ export class Service {
       let lastIsInserted: boolean = false;
       let allJoinedObjects: number = 0;
 
+      this.logger.info("[service.startSyncTo] objects", objects.length);
 
       //Datensätze mit Joins ermitteln und extrahieren
       for (let object of objects) {
@@ -543,6 +547,7 @@ export class Service {
       }
 
       //Hochladen der Datensätze auf den Sever starten
+      this.logger.info("[service.startSyncTo] objectsToSync", objectsToSync.length);
       this.uploader.init(allJoinedObjects + objectsToSync.length, joinedObjectsToSync);
       return this.uploader.start(this.api, objectsToSync).then((data) => {
         this.logger.info("[service.startSyncTo]", "finished");

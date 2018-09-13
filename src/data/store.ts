@@ -831,7 +831,7 @@ export class Store {
                 joins.push({entity_name : 'PIM\\File', entity_id: file_id});
               }
             }
-
+            break;
           //@todo: multijoin
           case 'join':
           case 'file':
@@ -856,7 +856,9 @@ export class Store {
         }
 
       }
+
       //@todo: modified_time
+
       params.push(data['id']);
 
       let statement = "" +
@@ -871,12 +873,12 @@ export class Store {
     }).then(() => {
       //Datensatz wurde aktualisiert
 
-      this.logger.info("store.update::" + entityName + ": gespeichert", data);
+      this.logger.info("[store.update] " + entityName + ": gespeichert", data);
       if(!disableQueueing) this.insertQueue(entityName, data['id'], QueueType.updated, joins);
 
       return Promise.resolve(data['id']);
     }).catch((error) =>{
-      this.logger.error("store.update(2)::" + entityName, error);
+      this.logger.error("[store.update] " + entityName, error);
       return Promise.reject(error);
     });
 
