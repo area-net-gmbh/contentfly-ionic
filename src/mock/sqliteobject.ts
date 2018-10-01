@@ -95,7 +95,10 @@ export class SQLiteMock {
     });
   }
 
-  public deleteDatabase(){
-    localStorage.removeItem("database");
-  }
+  public deleteDatabase (config: SQLiteDatabaseConfig): Promise<any> {
+    return new Promise((resolve, reject) => {
+      localStorage.removeItem("database");
+      resolve();
+    });
+  };
 }
