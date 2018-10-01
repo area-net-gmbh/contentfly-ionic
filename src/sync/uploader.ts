@@ -17,28 +17,27 @@ export class Uploader {
 
   /**
    * Prüfen ob verknüpfte Datensätze zu einem Objekt vorhanden sind
-   * @param objects
    * @param {string} id
    * @returns {boolean}
    */
-  private checkMultipleJoins(objects : any, id : string){
+  private checkMultipleJoins(id : string){
 
-    for(let objectIndex in objects[id]){
-      let object       = objects[id][objectIndex];
+    for(let objectIndex in this.joinedObjects[id]){
+      let object       = this.joinedObjects[id][objectIndex];
 
-      for(let keyId in objects){
+      for(let keyId in this.joinedObjects){
         if(keyId == id) continue;
 
-        for(let subobject of objects[keyId]){
+        for(let subobject of this.joinedObjects[keyId]){
           if(subobject.id == object.id){
-            objects[id].splice(objectIndex, 1);
+            this.joinedObjects[id].splice(objectIndex, 1);
             this.objectsToSyncCount--;
           }
         }
       }
     }
 
-    return objects[id].length > 0;
+    return this.joinedObjects[id].length > 0;
   }
 
   /**
@@ -62,7 +61,6 @@ export class Uploader {
     return statements
   }
 
-
   /**
    * Uploader initialisieren
    * @param objectsToSyncCount
@@ -83,14 +81,15 @@ export class Uploader {
     let promises = [];
 
     for(let object of objects){
+
       if(object.mode == QueueType.deleted){
-        this.logger.info("[upload.start] delete", object.entity + ':' + object.entity_id);
+        this.logger.info("[upload.start] delete", object.entity + '/' + object.entity_id);
         let p = api.post('delete', {entity: object.entity, id: object.entity_id}).then(() => {
           return this.store.query('DELETE FROM queue WHERE entity_id = ? ', [object.entity_id]);
         }).catch((error) => {
           this.logger.error('[uploader.start] api->delete', error);
 
-          if(error.code = 404){
+          if(error.status == 404){
             this.store.query('DELETE FROM queue WHERE id = ?', [object.id]).then().catch();
           }
 
@@ -126,7 +125,7 @@ export class Uploader {
             //Datensatz wurde aus Queue gelöscht
 
             if (this.joinedObjects[object.entity_id]) {
-              if (this.checkMultipleJoins(this.joinedObjects, object.entity_id)) {
+              if (this.checkMultipleJoins(object.entity_id)) {
                 var newObjectsToSync = JSON.parse(JSON.stringify(this.joinedObjects[object.entity_id]));
                 delete this.joinedObjects[object.entity_id];
                 return this.start(api, newObjectsToSync);
@@ -138,10 +137,9 @@ export class Uploader {
             this.logger.error('[uploader.start] fileupload ', error);
             return Promise.resolve([]);
           });
-
           promises.push(p);
         }else{
-          this.logger.info("[upload.start] replace", object.entity + ':' + object.entity_id);
+          this.logger.info("[upload.start] replace", object.entity + "->" + object.entity_id);
           let p = this.store.single(object.entity, object.entity_id).then((data) => {
             //Details zu Datensatz wurden geladen
 
@@ -151,14 +149,14 @@ export class Uploader {
             return api.post('replace', params);
           }).then((data) => {
             //Datensatz wurde auf dem Server synchronsiert
-
+            this.logger.info('[uploader.start] replace::uploaded ', object.entity_id);
             return this.store.query('DELETE FROM queue WHERE entity_id = ? ', [object.entity_id]);
           }).then((data) => {
             //Datensatz wurde aus Queue gelöscht
 
             if (this.joinedObjects[object.entity_id]) {
 
-              if(this.checkMultipleJoins(this.joinedObjects, object.entity_id)){
+              if(this.checkMultipleJoins(object.entity_id)){
                 var newObjectsToSync = JSON.parse(JSON.stringify(this.joinedObjects[object.entity_id]));
                 delete this.joinedObjects[object.entity_id];
                 return this.start(api, newObjectsToSync);
@@ -167,11 +165,12 @@ export class Uploader {
               }
             }
           }).catch((error) => {
-            if(error.code = 404){
+            if(error.status == 404){
               let statements =  [];
               statements.push(["DELETE FROM queue WHERE id = ?", [object.id]]);
               statements = this.deleteJoinedObjects(object.entity_id, statements);
-              this.store.batch(statements).then().catch()
+              this.store.batch(statements).then().catch();
+              this.logger.info('[uploader.start] replace::error-404 ', object.entity_id);
             }
 
             this.logger.error('[uploader.start] replace ', error);
@@ -186,9 +185,6 @@ export class Uploader {
 
     return Promise.all(promises);
   }
-
-
-
 
 
 }

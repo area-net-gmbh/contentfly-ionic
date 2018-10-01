@@ -10,6 +10,8 @@ import {ContentflySdk} from "./contentfly-sdk";
 import {Uploader} from "./sync/uploader";
 import {Service} from "./sync/service";
 import {SQLite} from "@ionic-native/sqlite";
+import {File} from "@ionic-native/file";
+import {Providers} from "./providers";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -28,19 +30,7 @@ export class ContentflyModule {
     static forRoot(config: Config): ModuleWithProviders {
         return {
             ngModule: ContentflyModule,
-            providers: [
-              {provide: API_CONFIG, useValue: config},
-              ContentflySdk,
-              Api,
-              Store,
-              SyncState,
-              User,
-              Schema,
-              Logger,
-              Uploader,
-              Service,
-              SQLite
-            ]
+            providers: Providers.getProviders(config)
         };
     }
 }

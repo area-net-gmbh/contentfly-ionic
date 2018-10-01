@@ -57,10 +57,7 @@ export class ContentflySdk {
    */
   public delete(entityName : string, id : string) : Promise<any>{
     return this.store.delete(entityName, id).then((data) => {
-      setTimeout( () => {
-        if(this.forceSyncTo) this.silentSync();
-      }, 1000);
-
+      if(this.forceSyncTo) this.silentSync();
       return data;
     });
   }

@@ -255,8 +255,12 @@ export class Store {
 
       return db.executeSql(statement, [id]).then(() => {
         this.logger.info("store.delete::" + entityName, id);
-        if(!noQueueing) this.insertQueue(entityName, id, QueueType.deleted);
-        return Promise.resolve();
+        if(!noQueueing){
+          return this.insertQueue(entityName, id, QueueType.deleted);
+        }else{
+          return Promise.resolve();
+        }
+
       }).catch((error) => {
         this.logger.error("store.delete::" + entityName + ":" +id, error);
         return Promise.reject(error);
@@ -458,7 +462,7 @@ export class Store {
 
       let dbName             = entityConfig.settings.dbname;
 
-      let excludedProps      = ['created', 'modified', 'id', 'isIntern'];
+      let excludedProps      = ['id', 'isIntern'];
 
       let dataArray = Array.isArray(data) ? data : [data];
       let statements : any[] = [];
@@ -516,7 +520,7 @@ export class Store {
               insertPlaceholders.push("?");
               params.push(dataObject[propName]);
 
-              let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
+              let joinedEntity = propConfig['type'] == 'file' ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
               joins.push({entity_name : joinedEntity, entity_id: dataObject[propName]});
 
               break;
@@ -534,6 +538,7 @@ export class Store {
           }
         }
 
+
         insertFields.push("`isIntern`");
         insertPlaceholders.push("0");
         insertFields.push("`user_id`");
@@ -542,10 +547,14 @@ export class Store {
         insertFields.push("`userCreated_id`");
         insertPlaceholders.push("?");
         params.push(this.user.id);
-        insertFields.push("`created`");
-        insertPlaceholders.push("datetime('now')");
-        insertFields.push("`modified`");
-        insertPlaceholders.push("datetime('now')");
+        if(!dataObject['created']) {
+          insertFields.push("`created`");
+          insertPlaceholders.push("datetime('now')");
+        }
+        if(!dataObject['modified']) {
+          insertFields.push("`modified`");
+          insertPlaceholders.push("datetime('now')");
+        }
         insertFields.push("`id`");
         insertPlaceholders.push("?");
         params.push(id);
@@ -588,7 +597,7 @@ export class Store {
    * @param {any[]} joins
    */
   private insertQueue(entity : string, entity_id : string, mode : QueueType, joins : any[] = []){
-    this.db().then((db) => {
+    let promise = this.db().then((db) => {
       let statement = "" +
         "INSERT INTO queue " +
         " (id, entity, entity_id, mode, joins, created, syncErrors) " +
@@ -597,10 +606,10 @@ export class Store {
 
       let id  :string = uuid();
 
-      db.executeSql(statement, [id, entity, entity_id, mode, JSON.stringify(joins)]).then(() => {
+      return db.executeSql(statement, [id, entity, entity_id, mode, JSON.stringify(joins)])
+    });
 
-      }).catch((error) => {});
-    }).catch((error) => {});;
+    return promise;
   }
 
   /**
@@ -839,7 +848,7 @@ export class Store {
             updateStmt.push("`" + propName + "` = ?");
             params.push(data[propName]);
 
-            let joinedEntity = propConfig['file'] ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
+            let joinedEntity = propConfig['type'] == 'file' ? 'PIM\\File' : propConfig['accept'].replace('Custom\\Entity\\', '');
             joins.push({entity_name : joinedEntity, entity_id: data[propName]});
 
             break;
@@ -874,9 +883,12 @@ export class Store {
       //Datensatz wurde aktualisiert
 
       this.logger.info("[store.update] " + entityName + ": gespeichert", data);
-      if(!disableQueueing) this.insertQueue(entityName, data['id'], QueueType.updated, joins);
+      if(!disableQueueing){
+        return this.insertQueue(entityName, data['id'], QueueType.updated, joins);
+      }else{
+        return Promise.resolve(data['id']);
+      }
 
-      return Promise.resolve(data['id']);
     }).catch((error) =>{
       this.logger.error("[store.update] " + entityName, error);
       return Promise.reject(error);

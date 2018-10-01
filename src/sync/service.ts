@@ -209,67 +209,67 @@ export class Service {
    */
   private syncFromEntity(entityName : string, lastSyncDate : string, startFromChunk : number){
 
-      let params = {
-        select: '*',
-        from: entityName,
-        setMaxResults: SYNC_CHUNK_SIZE,
-        setFirstResult: this.syncState.getLastChunkSize(entityName)
-      };
+    let params = {
+      select: '*',
+      from: entityName,
+      setMaxResults: SYNC_CHUNK_SIZE,
+      setFirstResult: this.syncState.getLastChunkSize(entityName)
+    };
 
-      if(lastSyncDate){
-        params['where'] = {'modified > ?' : [lastSyncDate]};
-      }
+    if(lastSyncDate){
+      params['where'] = {'modified > ?' : [lastSyncDate]};
+    }
 
-      return this.api.post('query', params).then((request) => {
-        //Datensätze seit letzter Synchronisierung wurden ermittelt
+    return this.api.post('query', params).then((request) => {
+      //Datensätze seit letzter Synchronisierung wurden ermittelt
 
-        let data: any[] = request['data'] ? request['data'] : [];
+      let data: any[] = request['data'] ? request['data'] : [];
 
-        if (data.length > 0) {
-          //Datensätze vorhanden und in Datenbank importieren
+      if (data.length > 0) {
+        //Datensätze vorhanden und in Datenbank importieren
 
-          var promise = new Promise((resolve, reject) => {
-            //Todo: Deleted Objects from Entity as Param
-            this.store.import(entityName, data).subscribe(
-              () => {
-                this.currentDataCount++;
-                let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-                this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
-              },
-              (error) => {
-                this.logger.error('[sync.service->syncFromEntity] store.import', error);
+        var promise = new Promise((resolve, reject) => {
+          //Todo: Deleted Objects from Entity as Param
+          this.store.import(entityName, data).subscribe(
+            () => {
+              this.currentDataCount++;
+              let progress = Math.round(this.currentDataCount / this.dataCount * 100);
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+            },
+            (error) => {
+              this.logger.error('[sync.service->syncFromEntity] store.import', error);
+              resolve();
+            },
+            () => {
+              //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
+              let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
+              this.syncState.setLastChunkSize(entityName, newStartFromChunK);
+              this.syncState.save();
+
+              this.syncFromEntity(entityName, lastSyncDate, newStartFromChunK).then(() => {
                 resolve();
-              },
-              () => {
-                //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
-                let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
-                this.syncState.setLastChunkSize(entityName, newStartFromChunK);
-                this.syncState.save();
+              });
+            }
+          );
+        });
 
-                this.syncFromEntity(entityName, lastSyncDate, newStartFromChunK).then(() => {
-                  resolve();
-                });
-              }
-            );
-          });
+        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
+        return promise;
 
-          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-          return promise;
+      }else{
+        //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
 
-        }else{
-          //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
+        this.syncState.setLastChunkSize(entityName, 0);
+        this.syncState.setLastSyncDate(entityName, request['ts']);
+        this.syncState.save();
 
-          this.syncState.setLastChunkSize(entityName, 0);
-          this.syncState.setLastSyncDate(entityName, request['ts']);
-          this.syncState.save();
-
-          //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
-          return Promise.resolve([]);
-        }
-      }).catch((error) => {
-        this.logger.error('[sync.service->syncFromEntity] api/query', error);
+        //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
         return Promise.resolve([]);
-      });
+      }
+    }).catch((error) => {
+      this.logger.error('[sync.service->syncFromEntity] api/query', error);
+      return Promise.resolve([]);
+    });
   }
 
   /**
@@ -313,7 +313,6 @@ export class Service {
     let startPromise  = null;
     let params        = {};
 
-
     if (Object.keys(countParams).length) {
       params = {lastModified: countParams};
       startPromise = this.api.post('deleted', params);
@@ -352,12 +351,6 @@ export class Service {
 
       this.dataCount        = countRequest['data']['dataCount'];
       this.currentDataCount = 0;
-
-      if(this.dataCount == 0){
-        this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
-        this.logger.info("Keine neuen Daten vorhanden.");
-        return Promise.resolve([]);
-      }
 
       let entities : any[] = [];
 
@@ -411,12 +404,27 @@ export class Service {
 
       }
 
+      if(this.dataCount == 0){
+        this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
+        this.logger.info("Keine neuen Daten vorhanden.");
+
+
+        if(countRequest['ts']){
+          for (let index in entities) {
+            var entity      = entities[index];
+            var entityName  = entity['entityName'];
+            this.syncState.setLastSyncDate(entityName, countRequest['ts']) ;
+          }
+
+          this.syncState.save();
+        }
+
+        return Promise.resolve([]);
+      }
+
       //[CODE_SYNCFROM_PARALLEL] Parallele Synchronisierung der Datensätze pro Entität
       var allPromises = [];
 
-      if(this.dataCount == 0){
-        return Promise.resolve();
-      }
 
       this.logger.info("[service.startSyncFrom] import", this.dataCount + 'objects');
       for (let index in entities) {
@@ -466,7 +474,7 @@ export class Service {
     let statement = "" +
       "SELECT * " +
       "FROM `queue` " +
-      "ORDER BY `entity_id`, `created` DESC";
+      "ORDER BY `entity_id`, `created` ASC";
 
     return this.store.query(statement, []).then((objects) => {
       //Zu synchronisierende Datensätze wurden ermittelt
@@ -475,80 +483,109 @@ export class Service {
         return Promise.resolve([]);
       }
 
-      let objectsToSync: any[] = [];
-      let joinedObjectsToSync: {} = {};
+      //Datensätze aus Queue bereinigen
+      // - nur letzte Änderungen eines Objektes
+      // - Überspringen und aus Queue löschen, wenn letzte Änderungeb = DEL und das Objekt zur vor eingefügt wurde
+      let cleanedObjects: any[] = [];
+      let deletedObjects : string[] = [];
       let lastObject: any = null;
       let lastIsInserted: boolean = false;
-      let allJoinedObjects: number = 0;
 
       this.logger.info("[service.startSyncTo] objects", objects.length);
 
-      //Datensätze mit Joins ermitteln und extrahieren
+
       for (let object of objects) {
         if (lastObject && lastObject.entity_id != object.entity_id) {
-
           if (lastObject.mode != QueueType.deleted || lastObject.mode == QueueType.deleted && !lastIsInserted) {
-            //if(objects.find(x => x.entity_name))
-            let joins = JSON.parse(lastObject.joins);
-            let joinFound = false;
-            if (joins && joins.length > 0) {
-              for (let join of joins) {
-                if (objects.find(x => x.entity == join.entity_name && x.entity_id == join.entity_id && x.mode == QueueType.inserted)) {
-                  joinFound = true;
-
-                  if (!joinedObjectsToSync[join.entity_id]) {
-                    joinedObjectsToSync[join.entity_id] = [];
-                  }
-                  joinedObjectsToSync[join.entity_id].push(lastObject);
-                  allJoinedObjects++;
-                }
-              }
-
-              if (!joinFound) {
-                objectsToSync.push(lastObject);
-              }
-            } else {
-              objectsToSync.push(lastObject);
-            }
+            cleanedObjects.push(lastObject);
+          }else{
+            deletedObjects.push(lastObject.entity_id);
           }
+          lastIsInserted = false;
         }
-        lastIsInserted = false;
+
         lastIsInserted = lastIsInserted || object.mode == QueueType.inserted;
         lastObject = object;
       }
 
       if (lastObject.mode != QueueType.deleted || lastObject.mode == QueueType.deleted && !lastIsInserted) {
-        let joins = JSON.parse(lastObject.joins);
+        cleanedObjects.push(lastObject);
+      }else{
+        deletedObjects.push(lastObject.entity_id);
+      }
+
+      let sqlDeleteStatements = [];
+      for(let deletedObjectId of deletedObjects){
+        sqlDeleteStatements.push(["DELETE FROM queue WHERE entity_id = ?", [deletedObjectId]]);
+
+        for(var cleanedObjectIndex = 0; cleanedObjectIndex <  cleanedObjects.length; cleanedObjectIndex++){
+          let cleanedObject = cleanedObjects[cleanedObjectIndex];
+          let joins = JSON.parse(cleanedObject.joins);
+          if (joins && joins.length > 0) {
+            for (let join of joins) {
+              if(join.entity_id == deletedObjectId){
+                //todo: Optonale Joins ("ON DELETE SET NULL")
+                sqlDeleteStatements.push(["DELETE FROM queue WHERE entity_id = ?", [cleanedObject.entity_id]]);
+                cleanedObjects.slice(cleanedObjectIndex, 1);
+              }
+            }
+          }
+        }
+      }
+
+      if(sqlDeleteStatements.length > 0){
+        this.store.batch(sqlDeleteStatements).then().catch();
+      }
+
+      if(!cleanedObjects.length){
+        return Promise.resolve([]);
+      }
+
+      //Abhängigkeiten ermitteln und Datensätze mit Joins extrahieren
+      let objectsToSync: any[] = [];
+      let joinedObjectsToSync: {} = {};
+      let allJoinedObjects: number = 0;
+
+      for(let cleanedObject of cleanedObjects){
+        let joins = JSON.parse(cleanedObject.joins);
         let joinFound = false;
         if (joins && joins.length > 0) {
+          //console.log("CLEANOBJECT: " + cleanedObject.id);
           for (let join of joins) {
-            if (objects.find(x => x.entity == join.entity_name && x.entity_id == join.entity_id && x.mode == QueueType.inserted)) {
+            //console.log(" ==> " + join.entity_id);
+            if (objects.find(x =>  x.entity_id == join.entity_id && x.mode == QueueType.inserted && x.id != cleanedObject.id)) {
               joinFound = true;
 
               if (!joinedObjectsToSync[join.entity_id]) {
                 joinedObjectsToSync[join.entity_id] = [];
               }
-              joinedObjectsToSync[join.entity_id].push(lastObject);
+              joinedObjectsToSync[join.entity_id].push(cleanedObject);
               allJoinedObjects++;
             }
           }
 
           if (!joinFound) {
-            objectsToSync.push(lastObject);
+            //console.log("PUSH objectsToSync");
+            objectsToSync.push(cleanedObject);
           }
         } else {
-          objectsToSync.push(lastObject);
+          //console.log("PUSH objectsToSync");
+          objectsToSync.push(cleanedObject);
         }
-      }
-
-
-      if(!objectsToSync.length){
-        return Promise.resolve([]);
       }
 
       //Hochladen der Datensätze auf den Sever starten
       this.logger.info("[service.startSyncTo] objectsToSync", objectsToSync.length);
       this.uploader.init(allJoinedObjects + objectsToSync.length, joinedObjectsToSync);
+
+      //console.log("###cleanedObjects");
+      //console.log(JSON.stringify(cleanedObjects));
+      //console.log("###objectsToSync");
+      //console.log(JSON.stringify(objectsToSync));
+      //console.log("###joinedObjectsToSync");
+      //console.log(JSON.stringify(joinedObjectsToSync));
+
+      //return Promise.resolve([]);
       return this.uploader.start(this.api, objectsToSync).then((data) => {
         this.logger.info("[service.startSyncTo]", "finished");
 
