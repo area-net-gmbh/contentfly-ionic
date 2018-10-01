@@ -14,7 +14,7 @@ export class SQLiteObject{
 
     return new Promise((resolve,reject)=>{
       try {
-        console.log(statement)
+        console.log(statement);
         var st = this._objectInstance.prepare(statement,params);
         var rows :Array<any> = [] ;
         while(st.step()) {
@@ -93,5 +93,9 @@ export class SQLiteMock {
     return new Promise((resolve,reject)=>{
       resolve(new SQLiteObject(db));
     });
+  }
+
+  public deleteDatabase(){
+    localStorage.removeItem("database");
   }
 }
