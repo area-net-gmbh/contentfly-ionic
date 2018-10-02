@@ -25,6 +25,7 @@ export class ContentflySdk {
     this.syncService.setApi(api);
   }
 
+
   /**
    * Führt mehrere SQL-Commands aus
    * @param {any[]} commands

@@ -342,6 +342,7 @@ export class Service {
       countRequest = countRequestFromPromise;
 
       if (countRequest['hash'] != this.schema.hash) {
+
         return this.updateSchema();
       } else {
         return Promise.resolve();

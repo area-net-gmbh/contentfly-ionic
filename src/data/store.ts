@@ -122,6 +122,7 @@ export class Store {
    */
   private createTableForEntity(db: SQLiteObject, entityConfig : any){
 
+
     let dbName: string = entityConfig.settings.dbname;
     let createTableString: string = "CREATE TABLE `" + dbName + "` (";
     let propertiesCreateStatement: string[] = [];
@@ -633,7 +634,10 @@ export class Store {
    */
   public query(sqlStatement : string, params : any[]) : Promise<any[]>{
     var promise = this.db().then((db) => {
-      return db.executeSql(sqlStatement, params);
+      return db.executeSql(sqlStatement, params).catch((error) => {
+        this.logger.error("[store.query] execute ", error);
+        return Promise.resolve([]);
+      });
     }).then((data) => {
       let items : any[] = [];
       if (data.rows.length > 0) {
@@ -643,7 +647,7 @@ export class Store {
       }
       return items;
     }).catch((error) => {
-      this.logger.error("[store.query]", error);
+      this.logger.error("[store.query] open ", error);
       return Promise.resolve([]);
     });
 
@@ -906,6 +910,8 @@ export class Store {
     this.schema   = schema;
     let promises  = [];
     let db        = null;
+
+    this.logger.info("SYNC store.updateSchema START ");
 
     let promise = this.db().then((dbInstance) => {
       //Datenbank wurde geöffnet
