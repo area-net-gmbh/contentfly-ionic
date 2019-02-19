@@ -49,7 +49,6 @@ export class Api {
     let params = new FormData();
     params.append('id', id);
     params.append('file', fileData, name);
-
     return this.http.post(this.config.baseUrl + '/file/upload', params, {headers: headers}).toPromise();
   }
 
@@ -109,7 +108,7 @@ export class Api {
    * @param {any} params
    * @returns {Promise<Object>}
    */
-  private request(method, endpoint, params = null) : Promise<Object> {
+  public request(method, endpoint, params = null) : Promise<Object> {
       let headers = {'Content-Type' : 'application/json'};
       if(this.user.token){
         headers['APPCMS-TOKEN'] = this.user.token

@@ -26,6 +26,7 @@ export class Service {
   private currentDataCount : number         = 0;
   private dataCount : number                = 0;
   private data : BehaviorSubject<Message>   = null;
+  private imageDownloadSize : string        = null;
   private isSyncing : boolean               = false;
 
   constructor(private events : Events, private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
@@ -46,6 +47,14 @@ export class Service {
    */
   public setApi(api : Api){
     this.api = api;
+  }
+
+  /**
+   * Lädt beim Synchronisieren nicht die Original Bilddatei, sondern die entsprechende im Backend definierte Bildgröße
+   * @param {string} sizeName
+   */
+  public setImageDownloadSize(sizeName : string){
+    this.imageDownloadSize = sizeName;
   }
 
   /**
@@ -82,7 +91,7 @@ export class Service {
       for(let index = 0; index < files.length; index++){
         let file = files[index];
 
-        let p = this.api.file(file['id']).then((blob) => {
+        let p = this.api.file(file['id'], this.imageDownloadSize).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
           return this.file.writeFile(this.file.dataDirectory, file['id'], blob, {replace: true} );
@@ -146,7 +155,6 @@ export class Service {
     if(lastSyncDate){
       params['where'] = {'dest.modified > ?' : [lastSyncDate]};
     }
-
 
     return this.api.post('query', params).then((request) => {
       //Datensätze seit letzter Synchronisierung wurden ermittelt
@@ -288,7 +296,7 @@ export class Service {
     }).catch((error) => {
       this.logger.error('[service.startSync]', error);
       this.isSyncing = false;
-      this.data.complete();
+      this.data.error(error);
     });
   }
 
@@ -358,6 +366,10 @@ export class Service {
       //Ermittle zu synchronisierende Entitäten
       for (let entityName in this.schema.data) {
         if(ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
+
+        if(this.schema.permissions[entityName]){
+          if(!this.schema.permissions[entityName]['readable']) continue;
+        }
 
         entities.push({key: entityName, entityName: entityName, isMultijoin: false});
 
@@ -429,6 +441,7 @@ export class Service {
 
       this.logger.info("[service.startSyncFrom] import", this.dataCount + 'objects');
       for (let index in entities) {
+
         var entity = entities[index];
         var key = entity['key'];
         var entityName = entity['entityName'];
@@ -437,6 +450,7 @@ export class Service {
         var lastSyncDate = this.syncState.getLastSyncDate(entityName);
 
         if (!isMultijoin) {
+
           let startFromChunK = this.syncState.getLastChunkSize(entityName);
           allPromises.push(this.syncFromEntity(entityName, lastSyncDate, startFromChunK));
         } else {
@@ -534,6 +548,8 @@ export class Service {
         }
       }
 
+      this.logger.info("[service.startSyncTo] objects cleaned", cleanedObjects.length + ' / ' + deletedObjects.length);
+
       if(sqlDeleteStatements.length > 0){
         this.store.batch(sqlDeleteStatements).then().catch();
       }
@@ -579,12 +595,6 @@ export class Service {
       this.logger.info("[service.startSyncTo] objectsToSync", objectsToSync.length);
       this.uploader.init(allJoinedObjects + objectsToSync.length, joinedObjectsToSync);
 
-      //console.log("###cleanedObjects");
-      //console.log(JSON.stringify(cleanedObjects));
-      //console.log("###objectsToSync");
-      //console.log(JSON.stringify(objectsToSync));
-      //console.log("###joinedObjectsToSync");
-      //console.log(JSON.stringify(joinedObjectsToSync));
 
       //return Promise.resolve([]);
       return this.uploader.start(this.api, objectsToSync).then((data) => {
@@ -608,9 +618,10 @@ export class Service {
    */
   private updateSchema(){
     return this.api.get('schema').then((schema) => {
-      this.schema.update(schema['data']);
+      this.schema.update(schema['data'], schema['permissions']);
       return this.store.updateSchema(this.schema);
     }).then( () => {
+      this.logger.info("SYNC store.updateSchema END ");
       this.schema.save();
       return Promise.resolve();
     });

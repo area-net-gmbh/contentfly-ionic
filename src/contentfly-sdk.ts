@@ -16,15 +16,14 @@ import {ApiResponse} from "./api/response.interface";
 @Injectable()
 export class ContentflySdk {
 
-  private forceSyncTo : boolean = true;
+  private forceSyncTo : boolean = false;
 
-  constructor(private api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
+  constructor(public api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
     this.api.setUser(this.user);
     this.store.setUser(this.user);
 
     this.syncService.setApi(api);
   }
-
 
   /**
    * Führt mehrere SQL-Commands aus
@@ -48,6 +47,38 @@ export class ContentflySdk {
     }).catch(() => {
 
     });
+  }
+
+  /**
+   * Umwandlung eines Base64-Strings in einen Blob
+   * @param string b64Data
+   * @param string contentType
+   */
+  private b64toBlob(b64Data, contentType) : Blob {
+
+    let b64plittedData  = b64Data.split(',')
+    let b64RawData      = b64plittedData.length == 2 ? b64plittedData[1] : b64plittedData[0];
+
+    contentType = contentType || '';
+    var sliceSize = 512;
+    var byteCharacters = atob(b64RawData);
+    var byteArrays = [];
+
+    for (var offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+      var slice = byteCharacters.slice(offset, offset + sliceSize);
+
+      var byteNumbers = new Array(slice.length);
+      for (var i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+
+      var byteArray = new Uint8Array(byteNumbers);
+
+      byteArrays.push(byteArray);
+    }
+
+    var blob = new Blob(byteArrays, {type: contentType});
+    return blob;
   }
 
   /**
@@ -112,6 +143,39 @@ export class ContentflySdk {
     });
   }
 
+  /**
+   * Speichern einer neuen Datei
+   * @param {string} base64Data
+   * @returns {Promise<any>}
+   */
+  public insertBase64File(base64Data : string, type: string, fileName : string = ''){
+    let data = {
+      'type' : type,
+      'name' : fileName,
+      'hash' : 'local',
+      '_hashLocal' : 'local',
+      'size' : 0,
+      'isIntern': 0
+    };
+
+    let newFileId           = null;
+
+    return this.insert('PIM\\File', data).then((id) => {
+      newFileId = id;
+      let blob = this.b64toBlob(base64Data, type);
+      return this.file.writeFile(this.file.dataDirectory, newFileId, blob, { replace: true })
+    }).then(() => {
+      this.logger.info('FILE SAVED', newFileId);
+      setTimeout( () => {
+        if(this.forceSyncTo) this.silentSync();
+      }, 1000);
+
+      return newFileId;
+    }).catch((error) => {
+      this.logger.error('insertBase64File', error);
+    })
+  }
+
 
   /**
    * Rückgabe des letzten Synchronisieruns-Datum vom Server
@@ -157,11 +221,19 @@ export class ContentflySdk {
   }
 
   /**
-   * Gibt die lokal geänderten und zu synchronisierenden Datensätze zurück
+   * Gibt alle lokal geänderten und zu synchronisierenden Datensätze zurück
    * @returns {Promise<any[]>}
    */
   queue(){
     return this.store.queue();
+  }
+
+  /**
+   * Gibt die eindeutig lokal geänderten und zu synchronisierenden Datensätze zurück
+   * @returns {Promise<any[]>}
+   */
+  queueCleaned(){
+    return this.store.queueCleaned();
   }
 
   /**
@@ -203,6 +275,14 @@ export class ContentflySdk {
    */
   public setForceSyncTo(forceSyncTo : boolean){
     this.forceSyncTo = forceSyncTo;
+  }
+
+  /**
+   * Lädt beim Synchronisieren nicht die Original Bilddatei, sondern die entsprechende im Backend definierte Bildgröße
+   * @param {string} sizeName
+   */
+  public setImageDownloadSize(sizeName : string){
+    this.syncService.setImageDownloadSize(sizeName);
   }
 
   /**

@@ -16,7 +16,7 @@ export class Uploader {
   }
 
   /**
-   * Prüfen ob verknüpfte Datensätze zu einem Objekt vorhanden sind
+   * Prüfen ob verknüpfte Datensätze zu einem Objekt vorhanden sindobjectsToSync
    * @param {string} id
    * @returns {boolean}
    */
@@ -112,6 +112,7 @@ export class Uploader {
 
             try {
               let fileData = new Blob([res], {type: objectComplete.type});
+
               return api.fileUpload(object.entity_id, objectComplete.name, fileData);
             } catch (error) {
               this.logger.error('[uploader.start] create blob ', error);
@@ -123,7 +124,7 @@ export class Uploader {
             return this.store.query('DELETE FROM queue WHERE entity_id = ? ', [object.entity_id]);
           }).then((data) => {
             //Datensatz wurde aus Queue gelöscht
-
+     
             if (this.joinedObjects[object.entity_id]) {
               if (this.checkMultipleJoins(object.entity_id)) {
                 var newObjectsToSync = JSON.parse(JSON.stringify(this.joinedObjects[object.entity_id]));
@@ -139,12 +140,13 @@ export class Uploader {
           });
           promises.push(p);
         }else{
-          this.logger.info("[upload.start] replace", object.entity + "->" + object.entity_id);
           let p = this.store.single(object.entity, object.entity_id).then((data) => {
             //Details zu Datensatz wurden geladen
 
             objectComplete = data;
             let params = {entity: object.entity, id: object.entity_id, data: objectComplete};
+
+            this.logger.info("[upload.start:replace]", params);
 
             return api.post('replace', params);
           }).then((data) => {
