@@ -18,7 +18,7 @@ export class ContentflySdk {
 
   private forceSyncTo : boolean = true;
 
-  constructor(private api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
+  constructor(public api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
     this.api.setUser(this.user);
     this.store.setUser(this.user);
 
@@ -157,11 +157,19 @@ export class ContentflySdk {
   }
 
   /**
-   * Gibt die lokal geänderten und zu synchronisierenden Datensätze zurück
+   * Gibt alle lokal geänderten und zu synchronisierenden Datensätze zurück
    * @returns {Promise<any[]>}
    */
   queue(){
     return this.store.queue();
+  }
+
+  /**
+   * Gibt die eindeutigen lokal geänderten und zu synchronisierenden Datensätze zurück
+   * @returns {Promise<any[]>}
+   */
+  queueCleaned(){
+    return this.store.queueClened();
   }
 
   /**

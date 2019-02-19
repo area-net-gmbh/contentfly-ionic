@@ -109,7 +109,7 @@ export class Api {
    * @param {any} params
    * @returns {Promise<Object>}
    */
-  private request(method, endpoint, params = null) : Promise<Object> {
+  public request(method, endpoint, params = null) : Promise<Object> {
       let headers = {'Content-Type' : 'application/json'};
       if(this.user.token){
         headers['APPCMS-TOKEN'] = this.user.token

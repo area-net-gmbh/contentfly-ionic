@@ -627,6 +627,20 @@ export class Store {
   }
 
   /**
+   * Gibt die Queue mit den zu synchronisierenden, lokalen Änderungen zurück
+   * @returns {Promise<any[]>}
+   */
+  public queueClened(){
+    let statement = "" +
+      "SELECT * " +
+      "FROM `queue` " +
+      "GROUP BY entity, entity_id " +
+      "ORDER BY `entity_id`, `created` DESC";
+
+    return this.query(statement, []);
+  }
+
+  /**
    * Ausführen einder Datenbank-Abfrage per SQL
    * @param {string} sqlStatement
    * @param {any[]} params
