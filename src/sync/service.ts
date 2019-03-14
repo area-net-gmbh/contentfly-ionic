@@ -90,8 +90,8 @@ export class Service {
 
       for(let index = 0; index < files.length; index++){
         let file = files[index];
-
-        let p = this.api.file(file['id'], this.imageDownloadSize).then((blob) => {
+        let size = file['type'] && file['type'].substr(0, 5) == 'image' ? this.imageDownloadSize : null;
+        let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
           return this.file.writeFile(this.file.dataDirectory, file['id'], blob, {replace: true} );
@@ -609,6 +609,8 @@ export class Service {
       });
     }).catch((error) => {
       this.logger.info('[store.startSyncTo]', error);
+      //@todo: Sync-Prozess hängt bei Fehler, nur durch App-Neustart?
+      return Promise.reject(error);
     });
   }
 

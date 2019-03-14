@@ -355,7 +355,8 @@ export class Store {
                 dbfield2field[propertyConfig['dbfield']] = field;
                 field =  propertyConfig['dbfield'];
               }else{
-                field =  field + '_id';
+                dbfield2field[field + '_id'] = field;
+                field = field + '_id';
               }
 
             }
@@ -373,6 +374,7 @@ export class Store {
 
             for (let field in props) {
               let rawValue = props[field];
+
               let stmtColInt = fieldsStatement.indexOf(field);
               let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
 
@@ -397,6 +399,7 @@ export class Store {
               }
 
             }
+
 
             batchStatements.push([preparedSQLStatement, valueStatement]);
             observer.next();
