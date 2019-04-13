@@ -28,6 +28,10 @@ export class SyncState {
     return this.get(entityName, 'chunk', 0);
   }
 
+  getLastSyncStartDate(){
+    return this.data['syncstartts'] ? this.data['syncstartts'] : null;
+  }
+
   save(){
     this.storage.set(STORAGE_SYNC_STATE, this.data);
   }
@@ -38,6 +42,11 @@ export class SyncState {
 
   setLastSyncToDate(ts : string){
     this.data['tsto'] = ts;
+  }
+
+  setLastSyncStartDate(){
+    let date = new Date();
+    this.data['syncstartts'] = date.getTime();
   }
 
   setLastChunkSize(entityName : string, chunk : number){

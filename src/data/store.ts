@@ -87,7 +87,7 @@ export class Store {
           'DROP TABLE IF EXISTS ' + dbName,
           'ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName,
         ]);
-        this.logger.error('alterTableForEntity:2', error);
+        this.logger.error('alterTableForEntity:2::' + entityConfig.settings.dbname, error);
 
         return Promise.reject(error);
       });
@@ -967,13 +967,14 @@ export class Store {
         "  `mode` TEXT NOT NULL," +
         "  `syncErrors` INTEGER NOT NULL" +
         ")";
+
+
       return db.executeSql(statementQueue, []);
 
     }).then(() => {
       //Tabelle Queue wurde erstellt oder ist bereits vorhanden
-
-      let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
-      let entitiedCreated  = 0;
+      //let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
+      //let entitiedCreated  = 0;
 
       if(!this.schema.oldData) {
         for (let key in schema.data) {

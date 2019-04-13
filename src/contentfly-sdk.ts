@@ -94,6 +94,7 @@ export class ContentflySdk {
     });
   }
 
+
   /**
    * Speichern eines neuen Objektes einer bestimmten Entität
    * @param {string} entityName
@@ -264,9 +265,10 @@ export class ContentflySdk {
 
   /**
    * Startet die Synchronisierung zum Server ohne Observable-Rückgabe
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    */
-  public silentSync(){
-    this.sync().subscribe(() => {}, () => {}, () =>{});
+  public silentSync(disableSyncFrom : boolean = false){
+    this.sync(disableSyncFrom).subscribe(() => {}, () => {}, () =>{});
   }
 
   /**
@@ -294,11 +296,28 @@ export class ContentflySdk {
   }
 
   /**
+   * Startet die Synchronisierung
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
+   * @returns {Observable<Message>}
+   */
+  public sync(disableSyncFrom : boolean = false){
+    return this.syncService.sync(disableSyncFrom);
+  }
+
+  /**
    * Startet die Synchronisierung zum Server
    * @returns {Observable<Message>}
    */
-  public sync(){
-    return this.syncService.sync();
+  public syncTo(){
+    return this.syncService.syncTo();
+  }
+
+  /**
+   * Startet den Synchronisations-Projekt vom Server
+   * @returns {Observable<Message>}
+   */
+  public syncFrom(){
+    return this.syncService.syncFrom();
   }
 
   /**

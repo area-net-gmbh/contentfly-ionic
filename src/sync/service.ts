@@ -6,7 +6,7 @@ import {Mode} from "./mode";
 import {
   CONTENTFLY_SYNC_START, CONTENTFLY_SYNC_SUCCESS,
   ENTITIES_TO_EXCLUDE,
-  SYNC_CHUNK_SIZE
+  SYNC_CHUNK_SIZE, TIMEOUT_SYNC_MINUTES
 } from "../constants";
 import {Schema} from "../data/schema";
 import {SyncState} from "./syncstate";
@@ -24,6 +24,8 @@ export class Service {
 
   private api : Api = null;
   private currentDataCount : number         = 0;
+  private currentRetryFrom : number         = 0;
+  private currentRetryTo : number           = 0;
   private dataCount : number                = 0;
   private data : BehaviorSubject<Message>   = null;
   private imageDownloadSize : string        = null;
@@ -33,12 +35,42 @@ export class Service {
 
   }
 
+  private checkSyncTimeout(){
+    let lastSyncToDate = this.syncState.getLastSyncStartDate();
+    this.logger.info('[service.sync]::isSyncing (' + lastSyncToDate +')', this.isSyncing);
+
+    if(lastSyncToDate){
+      let currDate = new Date();
+      let sec = (currDate.getTime() - lastSyncToDate)/1000;
+
+      if(sec/60 > TIMEOUT_SYNC_MINUTES){
+        this.isSyncing = false;
+      }
+    }else{
+      this.isSyncing = false;
+    }
+  }
+
   /**
    * Gibt den Synchronisations-Prozess zurück
    * @returns {Observable<Message>}
    */
   private getData() {
     return this.data.asObservable();
+  }
+
+
+  /**
+    * Gibt die Anzahl der zu synchronisierenden Objekte zurück
+    * @return Promise<any[]>
+    * */
+  private getQueue() : Promise<any[]>{
+    let statement = "" +
+      "SELECT * " +
+      "FROM `queue` " +
+      "ORDER BY `entity_id`, `created` ASC";
+
+    return this.store.query(statement, []);
   }
 
   /**
@@ -59,11 +91,54 @@ export class Service {
 
   /**
    * Startet den Synchronisations-Projekt
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    * @returns {Observable<Message>}
    */
-  public sync(){
+  public sync(disableSyncFrom : boolean = false){
+    this.checkSyncTimeout();
+
     if(!this.isSyncing){
-      this.startSync();
+
+      this.syncState.setLastSyncStartDate();
+      this.syncState.save();
+
+      this.startSync(disableSyncFrom);
+    }
+
+    return this.getData();
+  }
+
+  /**
+   * Startet den Synchronisations-Projekt vom Server
+   * @returns {Observable<Message>}
+   */
+  public syncFrom(){
+    this.checkSyncTimeout();
+
+    if(!this.isSyncing){
+
+      this.syncState.setLastSyncStartDate();
+      this.syncState.save();
+
+      this.startSync(false, true);
+    }
+
+    return this.getData();
+  }
+
+  /**
+   * Startet den Synchronisations-Projekt zum Server
+   * @returns {Observable<Message>}
+   */
+  public syncTo(){
+    this.checkSyncTimeout();
+
+    if(!this.isSyncing){
+
+      this.syncState.setLastSyncStartDate();
+      this.syncState.save();
+
+      this.startSync(true, false);
     }
 
     return this.getData();
@@ -94,7 +169,15 @@ export class Service {
         let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
-          return this.file.writeFile(this.file.dataDirectory, file['id'], blob, {replace: true} );
+          let filename : string = file['id'];
+          let type : string     = file['type'];
+
+          if(type && type.substr(0, 5) == 'video'){
+            let typeParts = type.split('/');
+            filename = filename + '.' + typeParts[1];
+          }
+
+          return this.file.writeFile(this.file.dataDirectory, filename, blob, {replace: true} );
         }).then(() => {
           //Blob wurde lokal gespeichert
 
@@ -282,19 +365,29 @@ export class Service {
 
   /**
    * Startet den Synchronisations-Prozess
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    */
-  private startSync(){
+  private startSync(disableSyncFrom : boolean = false, disableSyncTo : boolean = false){
     this.isSyncing  = true;
     this.events.publish(CONTENTFLY_SYNC_START, null);
 
-    this.startSyncTo().then(() => {
-      return this.startSyncFrom();
+    let promise = disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
+
+    promise.then(() => {
+      return disableSyncFrom || disableSyncTo ? Promise.resolve() : this.startSyncFrom();
     }).then(() => {
-      this.logger.info('[service.startSyncFrom]', 'finished');
+      if(disableSyncFrom){
+        this.logger.info('[service.startSyncTo]', 'finished');
+        this.data.next(new Message(Mode.FROM, 'Daten wurden erfolgreich synchronisiert.', 0, 0, 0));
+        this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
+      }else{
+        this.logger.info('[service.startSyncFrom]', 'finished');
+      }
+
       this.isSyncing = false;
       this.data.complete();
     }).catch((error) => {
-      this.logger.error('[service.startSync]', error);
+      this.logger.error('[service.startSync] ' + this.api.user.token, error);
       this.isSyncing = false;
       this.data.error(error);
     });
@@ -346,23 +439,19 @@ export class Service {
       return this.api.post('count', params);
     }).then((countRequestFromPromise) => {
       //Anzahl der geänderten Datensätze wurde ermittelt, gegebenenfalls wird Update des Schemas durchgeführt
-
       countRequest = countRequestFromPromise;
 
       if (countRequest['hash'] != this.schema.hash) {
-
         return this.updateSchema();
       } else {
         return Promise.resolve();
       }
     }).then((data) => {
       //Schema-Update wurde durchgeführt, oder nur Anzahl der Datensätze gespeichert
-
       this.dataCount        = countRequest['data']['dataCount'];
       this.currentDataCount = 0;
 
       let entities : any[] = [];
-
       //Ermittle zu synchronisierende Entitäten
       for (let entityName in this.schema.data) {
         if(ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
@@ -388,7 +477,7 @@ export class Service {
                 entityName:entityName,
                 entityProperty: property,
                 srcTableName: joinedTableName,
-                srcJoinField: "file_id",
+                srcJoinField: propertyConfig.mappedBy ? propertyConfig.mappedBy + "_id" : "file_id",
                 destTableName: "pim_file",
                 isMultijoin: true
               });
@@ -439,7 +528,7 @@ export class Service {
       var allPromises = [];
 
 
-      this.logger.info("[service.startSyncFrom] import", this.dataCount + 'objects');
+      this.logger.info("[service.startSyncFrom] import ", this.dataCount + 'objects');
       for (let index in entities) {
 
         var entity = entities[index];
@@ -486,16 +575,26 @@ export class Service {
     this.logger.info("[service.startSyncTo]", "started");
     this.data  = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
 
-    let statement = "" +
-      "SELECT * " +
-      "FROM `queue` " +
-      "ORDER BY `entity_id`, `created` ASC";
-
-    return this.store.query(statement, []).then((objects) => {
+    return this.getQueue().then((objects) => {
       //Zu synchronisierende Datensätze wurden ermittelt
 
-      if (!objects || !objects.length) {
-        return Promise.resolve([]);
+      if (!objects || !objects.length || this.currentRetryTo >= this.api.retry) {
+
+        this.currentRetryTo = 0;
+
+        if(!objects || !objects.length){
+          this.logger.info("[service.startSyncTo]", "finished (" + this.currentRetryTo + ")");
+
+          let d           = new Date();
+          let datestring  = d.getFullYear() + '-' + ("0"+(d.getMonth()+1)).slice(-2) + '-' + ("0" + d.getDate()).slice(-2) + ' ' + ("0" + d.getHours()).slice(-2) + ':' + ("0" + d.getMinutes()).slice(-2) + ':' + ("0" + d.getSeconds()).slice(-2)
+
+          this.syncState.setLastSyncToDate(datestring);
+          this.syncState.save();
+          return Promise.resolve([]);
+        }else{
+          return Promise.reject(objects.length + ' objectes failed to sync.')
+        }
+
       }
 
       //Datensätze aus Queue bereinigen
@@ -567,9 +666,7 @@ export class Service {
         let joins = JSON.parse(cleanedObject.joins);
         let joinFound = false;
         if (joins && joins.length > 0) {
-          //console.log("CLEANOBJECT: " + cleanedObject.id);
           for (let join of joins) {
-            //console.log(" ==> " + join.entity_id);
             if (objects.find(x =>  x.entity_id == join.entity_id && x.mode == QueueType.inserted && x.id != cleanedObject.id)) {
               joinFound = true;
 
@@ -582,11 +679,9 @@ export class Service {
           }
 
           if (!joinFound) {
-            //console.log("PUSH objectsToSync");
             objectsToSync.push(cleanedObject);
           }
         } else {
-          //console.log("PUSH objectsToSync");
           objectsToSync.push(cleanedObject);
         }
       }
@@ -597,19 +692,16 @@ export class Service {
 
 
       //return Promise.resolve([]);
-      return this.uploader.start(this.api, objectsToSync).then((data) => {
-        this.logger.info("[service.startSyncTo]", "finished");
-
-        let d           = new Date();
-        let datestring  = d.getFullYear() + '-' + ("0"+(d.getMonth()+1)).slice(-2) + '-' + ("0" + d.getDate()).slice(-2) + ' ' + ("0" + d.getHours()).slice(-2) + ':' + ("0" + d.getMinutes()).slice(-2) + ':' + ("0" + d.getSeconds()).slice(-2)
-
-        this.syncState.setLastSyncToDate(datestring);
-        this.syncState.save();
-        return Promise.resolve([]);
+      return this.uploader.start(this.api, objectsToSync).then(() => {
+        this.currentRetryTo++;
+        return this.startSyncTo();
+      }).catch((error) => {
+        this.currentRetryTo++;
+        return this.startSyncTo();
       });
     }).catch((error) => {
       this.logger.info('[store.startSyncTo]', error);
-      //@todo: Sync-Prozess hängt bei Fehler, nur durch App-Neustart?
+
       return Promise.reject(error);
     });
   }
