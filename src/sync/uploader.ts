@@ -93,7 +93,7 @@ export class Uploader {
             this.store.query('DELETE FROM queue WHERE id = ?', [object.id]).then().catch();
           }
 
-          return Promise.resolve();
+          return Promise.resolve(false);
         });
 
         promises.push(p);
@@ -176,7 +176,7 @@ export class Uploader {
             }
 
             this.logger.error('[uploader.start] replace ', error);
-            return Promise.resolve();
+            return Promise.resolve(false);
           });
 
           promises.push(p);

@@ -10,7 +10,7 @@ export const STORAGE_COMMANDS_INDEX : string  = "contentfly_dbcommands_index";
 export const SYNC_CHUNK_SIZE : number         = 5000;
 export const ENTITIES_TO_EXCLUDE : string[]   = ['_hash', 'PIM\\Folder', 'PIM\\Token', 'PIM\\PushToken', 'PIM\\ThumbnailSetting', 'PIM\\Log', 'PIM\\Permission', 'PIM\\Nav', 'PIM\\NavItem'];
 
-export const TIMEOUT : number                 = 10000;
-export const TIMEOUT_FILES : number           = 60000;
+export const TIMEOUT : number                 = 30000;
+export const TIMEOUT_FILES : number           = 120000;
 export const TIMEOUT_SYNC_MINUTES : number    = 30;
 export const RETRY : number                   = 3;

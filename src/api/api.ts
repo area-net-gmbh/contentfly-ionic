@@ -1,21 +1,18 @@
 import {Inject, Injectable} from "@angular/core";
-import {HttpClient, HttpErrorResponse, HttpEvent, HttpEventType, HttpHeaders, HttpRequest} from "@angular/common/http";
+import {HttpClient} from "@angular/common/http";
 import {User} from "../auth/user";
 import {ApiResponse} from "./response.interface";
 import {API_CONFIG} from "../contentfly.module";
 import {Config} from "./config";
-import {catchError, retry, tap} from "rxjs/operators";
-import {Observable} from "rxjs/Observable";
-import {of} from "rxjs/observable/of";
-import {map} from "rxjs/operator/map";
 import {Logger} from "../helper/logger";
-import {timeout} from "rxjs/operator/timeout";
 import {RETRY, TIMEOUT, TIMEOUT_FILES} from "../constants";
+import {retry, timeout} from "rxjs/operators";
 
 
 @Injectable()
 export class Api {
 
+  public debugRequests : boolean  = false;
   public retry : number           = RETRY;
   public timeout : number         = TIMEOUT;
   public timeout_filest : number  = TIMEOUT_FILES;
@@ -36,9 +33,11 @@ export class Api {
     if(size){
       sizeParam = '/s-' + size;
     }
-    console.log("FILE");
 
-    return this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).timeout(this.timeout_filest).retry(this.retry).toPromise();
+    return this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).pipe(
+      timeout(this.timeout_filest),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -60,7 +59,10 @@ export class Api {
     let params = new FormData();
     params.append('id', id);
     params.append('file', fileData, name);
-    return this.http.post(this.config.baseUrl + '/file/upload', params, {headers: headers}).timeout(this.timeout_filest).retry(this.retry).toPromise();
+    return this.http.post(this.config.baseUrl + '/file/upload', params, {headers: headers}).pipe(
+      timeout(this.timeout_filest),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -93,7 +95,10 @@ export class Api {
       params['loginManager'] = loginManager;
     }
 
-    return this.http.post<ApiResponse>(this.config.baseUrl + '/auth/login', params).timeout(this.timeout).retry(this.retry).toPromise();
+    return this.http.post<ApiResponse>(this.config.baseUrl + '/auth/login', params).pipe(
+      timeout(this.timeout),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -127,12 +132,22 @@ export class Api {
         headers['APPCMS-TOKEN'] = this.user.token;
       }
 
+      if(this.debugRequests){
+        this.logger.info(method + ' ' + this.config.baseUrl + '/' + endpoint, params);
+      }
+
       if(method == 'POST'){
 
-        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers}).timeout(this.timeout).retry(this.retry).toPromise();
+        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers}).pipe(
+          timeout(this.timeout),
+          retry(this.retry)
+        ).toPromise();
       } else{
 
-        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers}).timeout(this.timeout).retry(this.retry).toPromise();
+        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers}).pipe(
+          timeout(this.timeout),
+          retry(this.retry)
+        ).toPromise();
       }
   }
 

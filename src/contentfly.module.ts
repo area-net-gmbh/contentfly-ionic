@@ -12,7 +12,6 @@ import {Service} from "./sync/service";
 import {SQLite} from "@ionic-native/sqlite";
 import {File} from "@ionic-native/file";
 import {HTTP_INTERCEPTORS} from "@angular/common/http";
-import {AbortInterceptor} from "./api/interceptor";
 import {XHRBackend} from "@angular/http";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');

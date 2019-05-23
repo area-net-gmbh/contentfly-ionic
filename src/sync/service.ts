@@ -17,6 +17,7 @@ import {Uploader} from "./uploader";
 import {BehaviorSubject} from "rxjs/BehaviorSubject";
 import { Observable } from "rxjs/Observable";
 import {Events} from "ionic-angular";
+import {P} from "@angular/core/src/render3";
 
 
 @Injectable()
@@ -30,10 +31,12 @@ export class Service {
   private data : BehaviorSubject<Message>   = null;
   private imageDownloadSize : string        = null;
   private isSyncing : boolean               = false;
+  public syncChunkSize : number            = SYNC_CHUNK_SIZE;
 
   constructor(private events : Events, private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
 
   }
+
 
   private checkSyncTimeout(){
     let lastSyncToDate = this.syncState.getLastSyncStartDate();
@@ -49,6 +52,28 @@ export class Service {
     }else{
       this.isSyncing = false;
     }
+  }
+
+  public countFromServer() : Promise<number>{
+    let countParams: {} = {};
+
+    //Lade letzte Synchronisations-Datum zu jeder Entität
+    for (let entityName in this.schema.data) {
+      if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
+      if (this.syncState.getLastSyncDate(entityName)) {
+        countParams[entityName] = this.syncState.getLastSyncDate(entityName);
+      }
+    }
+
+    let params  = {};
+
+    if (Object.keys(countParams).length) {
+      params = {lastModified: countParams};
+    }
+
+    return this.api.post('count', params).then((countRequest) => {
+      return countRequest['data']['dataCount'];
+    })
   }
 
   /**
@@ -161,7 +186,7 @@ export class Service {
 
       let allPromises = [];
 
-      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', 0, 1, this.dataCount));
+      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', 0, 1, this.dataCount));
 
       for(let index = 0; index < files.length; index++){
         let file = files[index];
@@ -192,7 +217,8 @@ export class Service {
 
           this.currentDataCount++;
           let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+
+          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
 
           return Promise.resolve();
         }).catch((error) => {
@@ -231,7 +257,7 @@ export class Service {
       "select": "src.*",
       "from": from,
       "innerJoin": ["src", destTableName, "dest", "src." + sourceJoinField + " = dest.id"],
-      setMaxResults: SYNC_CHUNK_SIZE,
+      setMaxResults: this.syncChunkSize,
       setFirstResult: this.syncState.getLastChunkSize(key)
     };
 
@@ -253,7 +279,8 @@ export class Service {
             () => {
               this.currentDataCount++;
               let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
             },
             (error) => {
               this.logger.error('[sync.service->syncFromEntity] store.import', error);
@@ -262,7 +289,7 @@ export class Service {
             () => {
               //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
 
-              let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
+              let newStartFromChunK = startFromChunk + this.syncChunkSize;
               this.syncState.setLastChunkSize(key, newStartFromChunK);
               this.syncState.save();
 
@@ -303,7 +330,7 @@ export class Service {
     let params = {
       select: '*',
       from: entityName,
-      setMaxResults: SYNC_CHUNK_SIZE,
+      setMaxResults: this.syncChunkSize,
       setFirstResult: this.syncState.getLastChunkSize(entityName)
     };
 
@@ -325,7 +352,8 @@ export class Service {
             () => {
               this.currentDataCount++;
               let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronsiert...', progress, this.currentDataCount, this.dataCount));
+
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
             },
             (error) => {
               this.logger.error('[sync.service->syncFromEntity] store.import', error);
@@ -333,7 +361,8 @@ export class Service {
             },
             () => {
               //Datensätze wurden importiert, nächsten Chunk-Durchlauf anstoßen
-              let newStartFromChunK = startFromChunk + SYNC_CHUNK_SIZE;
+              let newStartFromChunK = startFromChunk + this.syncChunkSize;
+              this.logger.info('[sync.service->NEW CHUNK] ' + entityName, newStartFromChunK);
               this.syncState.setLastChunkSize(entityName, newStartFromChunK);
               this.syncState.save();
 
@@ -358,7 +387,7 @@ export class Service {
         return Promise.resolve([]);
       }
     }).catch((error) => {
-      this.logger.error('[sync.service->syncFromEntity] api/query', error);
+      this.logger.error('[sync.service->syncFromEntity] api/query/' + entityName + '::' + JSON.stringify(params), error);
       return Promise.resolve([]);
     });
   }
@@ -371,6 +400,8 @@ export class Service {
     this.isSyncing  = true;
     this.events.publish(CONTENTFLY_SYNC_START, null);
 
+    this.data = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisiereung...'));
+
     let promise = disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
 
     promise.then(() => {
@@ -378,6 +409,7 @@ export class Service {
     }).then(() => {
       if(disableSyncFrom){
         this.logger.info('[service.startSyncTo]', 'finished');
+
         this.data.next(new Message(Mode.FROM, 'Daten wurden erfolgreich synchronisiert.', 0, 0, 0));
         this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
       }else{
@@ -387,6 +419,8 @@ export class Service {
       this.isSyncing = false;
       this.data.complete();
     }).catch((error) => {
+
+      this.data.next(new Message(Mode.FROM, 'Synchronisation wurde mit Fehlern abgebrochen.', 0, 0, 0));
       this.logger.error('[service.startSync] ' + this.api.user.token, error);
       this.isSyncing = false;
       this.data.error(error);
@@ -401,15 +435,20 @@ export class Service {
     this.logger.info("[service.startSyncFrom]", "started");
 
     this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...'));
-    let countParams: {} = {};
 
+    let countParams: {}       = {};
+    let countLoaded : number  = 0;
     //Lade letzte Synchronisations-Datum zu jeder Entität
     for (let entityName in this.schema.data) {
       if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
       if (this.syncState.getLastSyncDate(entityName)) {
         countParams[entityName] = this.syncState.getLastSyncDate(entityName);
       }
+
+      countLoaded += this.syncState.getLastChunkSize(entityName);
     }
+
+    console.log("LAST CHUNK SIZE = " + countLoaded);
 
     let startPromise  = null;
     let params        = {};
@@ -428,6 +467,7 @@ export class Service {
 
       if(deletedObjectsFromPromise && deletedObjectsFromPromise['data'] && deletedObjectsFromPromise['data'].length > 0){
         this.logger.info("[service.startSyncFrom] delete", deletedObjectsFromPromise['data'].length + ' objects');
+
         this.data.next(new Message(Mode.FROM, 'Datenbank bereinigen...', 0, 0, 0));
         return this.store.deleteObjects(deletedObjectsFromPromise['data']);
       }else{
@@ -442,13 +482,14 @@ export class Service {
       countRequest = countRequestFromPromise;
 
       if (countRequest['hash'] != this.schema.hash) {
+        //this.data.next(new Message(Mode.FROM, 'Aktualisiere Datenbankschema...'));
         return this.updateSchema();
       } else {
         return Promise.resolve();
       }
     }).then((data) => {
       //Schema-Update wurde durchgeführt, oder nur Anzahl der Datensätze gespeichert
-      this.dataCount        = countRequest['data']['dataCount'];
+      this.dataCount        = countRequest['data']['dataCount'] - countLoaded;
       this.currentDataCount = 0;
 
       let entities : any[] = [];
@@ -507,6 +548,7 @@ export class Service {
       }
 
       if(this.dataCount == 0){
+
         this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
         this.logger.info("Keine neuen Daten vorhanden.");
 
@@ -527,7 +569,7 @@ export class Service {
       //[CODE_SYNCFROM_PARALLEL] Parallele Synchronisierung der Datensätze pro Entität
       var allPromises = [];
 
-
+      this.data.next(new Message(Mode.FROM, 'Lade Änderungen vom Server...'));
       this.logger.info("[service.startSyncFrom] import ", this.dataCount + 'objects');
       for (let index in entities) {
 
@@ -559,6 +601,7 @@ export class Service {
       }
 
       return this.syncFiles().then(() => {
+
         this.data.next(new Message(Mode.FROM, 'Daten wurden erfolgreich synchronisiert.', 0, 0, 0));
         this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
         return Promise.resolve();
@@ -568,35 +611,36 @@ export class Service {
   }
 
   /**
-   * Startet Synchronisations-Prozess zum Server
+   * Startet Synchronisations-Prozess zum Server - Observable Startup Message
    * @returns {Promise<any[]>}
    */
-  private startSyncTo(){
+  private startSyncTo() {
     this.logger.info("[service.startSyncTo]", "started");
-    this.data  = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
+    this.data = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
+    return this.startSyncToProc();
+  }
+
+  /**
+   * Startet Synchronisations-Prozess zum Server - Prozess
+   * @returns {Promise<any[]>}
+   */
+  private startSyncToProc(){
+
+    this.currentRetryTo++;
 
     return this.getQueue().then((objects) => {
       //Zu synchronisierende Datensätze wurden ermittelt
-
-      if (!objects || !objects.length || this.currentRetryTo >= this.api.retry) {
-
-        this.currentRetryTo = 0;
-
-        if(!objects || !objects.length){
-          this.logger.info("[service.startSyncTo]", "finished (" + this.currentRetryTo + ")");
-
-          let d           = new Date();
-          let datestring  = d.getFullYear() + '-' + ("0"+(d.getMonth()+1)).slice(-2) + '-' + ("0" + d.getDate()).slice(-2) + ' ' + ("0" + d.getHours()).slice(-2) + ':' + ("0" + d.getMinutes()).slice(-2) + ':' + ("0" + d.getSeconds()).slice(-2)
-
-          this.syncState.setLastSyncToDate(datestring);
-          this.syncState.save();
+      if (!objects || !objects.length ) {
           return Promise.resolve([]);
-        }else{
-          return Promise.reject(objects.length + ' objectes failed to sync.')
-        }
-
       }
 
+      let message = 'Übermittle ' + objects.length + ' Datensätze an Server';
+
+      if(this.currentRetryTo > 1){
+        message += ' (' + this.currentRetryTo + '. Versuch)';
+      }
+
+      this.data.next(new Message(Mode.TO, message));
       //Datensätze aus Queue bereinigen
       // - nur letzte Änderungen eines Objektes
       // - Überspringen und aus Queue löschen, wenn letzte Änderungeb = DEL und das Objekt zur vor eingefügt wurde
@@ -692,18 +736,35 @@ export class Service {
 
 
       //return Promise.resolve([]);
-      return this.uploader.start(this.api, objectsToSync).then(() => {
-        this.currentRetryTo++;
-        return this.startSyncTo();
-      }).catch((error) => {
-        this.currentRetryTo++;
-        return this.startSyncTo();
-      });
+      return this.uploader.start(this.api, objectsToSync);
+    }).then(() => {
+      return this.getQueue();
+    }).then((objects) => {
+      if(!objects || !objects.length || this.currentRetryTo >= this.api.retry){
+        return this.startSyncToEnd();
+      }
+
+      return this.startSyncToProc();
     }).catch((error) => {
+
       this.logger.info('[store.startSyncTo]', error);
 
       return Promise.reject(error);
+
     });
+  }
+
+  private startSyncToEnd(){
+    this.logger.info("[service.startSyncTo]", "finished (" + this.currentRetryTo + ")");
+
+    let d           = new Date();
+    let datestring  = d.getFullYear() + '-' + ("0"+(d.getMonth()+1)).slice(-2) + '-' + ("0" + d.getDate()).slice(-2) + ' ' + ("0" + d.getHours()).slice(-2) + ':' + ("0" + d.getMinutes()).slice(-2) + ':' + ("0" + d.getSeconds()).slice(-2)
+
+    this.currentRetryTo = 0;
+
+    this.syncState.setLastSyncToDate(datestring);
+    this.syncState.save();
+    return Promise.resolve([]);
   }
 
   /**

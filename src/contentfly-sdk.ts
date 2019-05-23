@@ -50,6 +50,13 @@ export class ContentflySdk {
   }
 
   /**
+   * Anzahl der noch offenen Datensätze vom Sever prüfen
+   */
+  public countFromServer() : Promise<number>{
+    return this.syncService.countFromServer();
+  }
+
+  /**
    * Umwandlung eines Base64-Strings in einen Blob
    * @param string b64Data
    * @param string contentType
@@ -252,7 +259,12 @@ export class ContentflySdk {
    * @returns {Promise<any>}
    */
   public ready(){
-    return this.user.load();
+    return this.user.load().then(() => {
+      this.api.setUser(this.user);
+      this.store.setUser(this.user);
+
+      return Promise.resolve();
+    });
   }
 
   /**
@@ -269,6 +281,30 @@ export class ContentflySdk {
    */
   public silentSync(disableSyncFrom : boolean = false){
     this.sync(disableSyncFrom).subscribe(() => {}, () => {}, () =>{});
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setApiDebugRequests(doDebug : boolean){
+    this.api.debugRequests = doDebug;
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setChunkSize(chunkSize : number){
+    this.syncService.syncChunkSize = chunkSize;
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setStoreDebugImportWithoutBatch(doDebug : boolean){
+    this.store.debugImportWithoutBatch = doDebug;
   }
 
   /**
