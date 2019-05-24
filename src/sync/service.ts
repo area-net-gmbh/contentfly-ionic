@@ -334,6 +334,12 @@ export class Service {
       setFirstResult: this.syncState.getLastChunkSize(entityName)
     };
 
+    var entityConfig = this.schema.data[entityName];
+    if(entityConfig['settings']['type'] == 'tree'){
+      let joinTableName = entityConfig['settings']['i18n'] ? 'pim_i18n_tree' : 'pim_tree';
+      params['leftJoin'] = [entityName, joinTableName, 'j', entityName + '.id = j.id'];
+    }
+
     if(lastSyncDate){
       params['where'] = {'modified > ?' : [lastSyncDate]};
     }

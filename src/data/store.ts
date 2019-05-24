@@ -361,12 +361,14 @@ export class Store {
 
 
           for (let propertyKey in properties) {
-            let dbfield = null;
+
             let propertyConfig : any[] = properties[propertyKey];
             let type : string = propertyConfig['type'];
             if(type == "multijoin" || type == "multifile"){
               continue
             }
+
+            let dbfield = propertyKey;
 
             if(type == "file" || type == "join"){
               if(propertyConfig['dbfield']){
