@@ -13,8 +13,9 @@ import {User} from "../auth/user";
 @Injectable()
 export class Store {
 
-  private _db : SQLiteObject = null;
-  private user : User = null;
+  private _db : SQLiteObject                  = null;
+  public debugImportWithoutBatch : boolean    = false;
+  private user : User                         = null;
 
   constructor(private sqlite : SQLite, private schema : Schema, private logger : Logger){
 
@@ -28,6 +29,8 @@ export class Store {
    * @returns {Promise<any>}
    */
   private alterTableForEntity(db: SQLiteObject, entityConfig : any, entityOldConfig : any){
+
+    this.logger.info("SYNC store.updateSchema UPDATE", entityConfig.settings.dbname);
 
     let dbName: string = entityConfig.settings.dbname;
 
@@ -44,28 +47,35 @@ export class Store {
         continue;
       }
       if(entityConfig.properties[property]['type'] == 'file'){
-        tempProperties.push('`file_id`');
+        //@todo: Multijoin file_id anstatt [property]_id
+        tempProperties.push('`' + property + '_id' + '`');
         continue;
       }
 
       tempProperties.push('`' + property + '`');
     }
 
+
+
     let statements = [
       'CREATE TABLE IF NOT EXISTS temp_' + dbName + ' AS SELECT ' + tempProperties.join(',') + ' FROM ' + dbName,
       'DROP TABLE IF EXISTS ' + dbName
     ];
 
+
     let promise = db.sqlBatch(statements).then(() => {
       //Bestehende Tabelle wurde in Temp-Tabelle kopiert
+      this.logger.info("SYNC store.updateSchema " + entityConfig.settings.dbname, 1);
 
       return this.createTableForEntity(db, entityConfig).catch((error) => {
         db.executeSql('ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName, []);
+        this.logger.error('alterTableForEntity:1', error);
 
         return Promise.reject(error);
       });
     }).then(() => {
       //Neue Tabelle wurde angelegt und Daen kopiert
+      this.logger.info("SYNC store.updateSchema " + entityConfig.settings.dbname, 2);
 
       let subStatements = [
         'INSERT INTO ' + dbName + '(' + tempProperties.join(',') + ') SELECT ' + tempProperties.join(',') + ' FROM temp_' + dbName,
@@ -77,9 +87,13 @@ export class Store {
           'DROP TABLE IF EXISTS ' + dbName,
           'ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName,
         ]);
+        this.logger.error('alterTableForEntity:2::' + entityConfig.settings.dbname, error);
 
         return Promise.reject(error);
       });
+    }).catch((error) => {
+      this.logger.error("SYNC store.updateSchema " + entityConfig.settings.dbname,  error);
+      return Promise.reject(error);
     });
 
     return promise;
@@ -105,12 +119,16 @@ export class Store {
    * @returns {number}
    */
   private boolVal2Int(value: any) {
+
+    if(!value){
+      return 0;
+    }
+
     value = String(value);
 
     switch(value.toLowerCase().trim()){
-      case "true": case "yes": case "1": return 1;
       case "false": case "no": case "0": case null: return 0;
-      default: 0;
+      default: return 1;
     }
   }
 
@@ -122,6 +140,7 @@ export class Store {
    */
   private createTableForEntity(db: SQLiteObject, entityConfig : any){
 
+    this.logger.info("SYNC store.updateSchema CREATE ", entityConfig.settings.dbname);
 
     let dbName: string = entityConfig.settings.dbname;
     let createTableString: string = "CREATE TABLE `" + dbName + "` (";
@@ -152,7 +171,13 @@ export class Store {
         case "join":
         case "file":
           dbtype = "TEXT";
-          property =  property + '_id';
+
+          if(propertyConfig['dbfield']){
+            property =  propertyConfig['dbfield'];
+          }else{
+            property =  property + '_id';
+          }
+
           break;
         case "multifile":
           var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
@@ -177,6 +202,7 @@ export class Store {
           continue;
         case "decimal":
           dbtype = "FLOAT";
+          break;
         case "string":
         case "datetime":
         case "date":
@@ -188,15 +214,22 @@ export class Store {
           break
       }
 
-      if (property == "id") {
-        special = "PRIMARY KEY NOT NULL";
-      } else if (propertyConfig.nullable === false) {
+      if (propertyConfig.nullable === false || property == "id") {
         special = "NOT NULL";
       }
 
       propertiesCreateStatement.push("`" + property + "` " + dbtype + " " + special);
 
     }
+
+
+    let primaryKey = '`id`';
+
+    if(entityConfig.settings.i18n){
+      primaryKey += ',`lang`';
+    }
+
+    propertiesCreateStatement.push('PRIMARY KEY (' + primaryKey + ')');
 
     createTableString += propertiesCreateStatement.join(", ");
     createTableString += ")";
@@ -322,26 +355,42 @@ export class Store {
           let properties : any[] = this.schema.data[entity].properties;
           let dbName : string    = this.schema.data[entity].settings.dbname;
 
-          let fieldsStatement : string[] = [];
-          let placeholderStatement : string[] = [];
+          let dbfield2field : {}                = {};
+          let fieldsStatement : string[]        = [];
+          let placeholderStatement : string[]   = [];
 
-          for (let field in properties) {
-            let propertyConfig : any[] = properties[field];
+
+          for (let propertyKey in properties) {
+
+            let propertyConfig : any[] = properties[propertyKey];
             let type : string = propertyConfig['type'];
             if(type == "multijoin" || type == "multifile"){
               continue
             }
 
+            let dbfield = propertyKey;
+
             if(type == "file" || type == "join"){
-              field =  field + '_id';
+              if(propertyConfig['dbfield']){
+                dbfield =  propertyConfig['dbfield'];
+                dbfield2field[dbfield] = propertyKey;
+
+              }else{
+                dbfield = propertyKey + '_id';
+                dbfield2field[dbfield] = propertyKey;
+              }
+
             }
 
-            fieldsStatement.push(field);
+            fieldsStatement.push(dbfield);
             placeholderStatement.push("?");
           }
 
           let preparedSQLStatement = "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
+
           let batchStatements : any[] = [];
+
+          let promises = [];
 
           for (let props of data) {
 
@@ -349,12 +398,9 @@ export class Store {
 
             for (let field in props) {
               let rawValue = props[field];
-              let stmtColInt = fieldsStatement.indexOf(field);
-              let fieldForConfig = field;
 
-              if(field.substr(field.length - 3) == '_id'){
-                fieldForConfig = field.substr(0, field.length - 3);
-              }
+              let stmtColInt = fieldsStatement.indexOf(field);
+              let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
 
               let propertyConfig = properties[fieldForConfig];
 
@@ -363,13 +409,13 @@ export class Store {
               }
 
               let type: string = propertyConfig['type'];
+
               switch(type){
                 case 'multijoin':
                 case 'multifile':
                   break;
                 case "checkbox":
                 case "boolean":
-                  //console.log(fieldForConfig + " == " + rawValue + " == " + this.boolVal(rawValue));
                   valueStatement[stmtColInt] = this.boolVal2Int(rawValue);
                   break;
                 default:
@@ -378,16 +424,42 @@ export class Store {
               }
 
             }
+            if(this.debugImportWithoutBatch){
 
-            batchStatements.push([preparedSQLStatement, valueStatement]);
-            observer.next();
+              let promise = db.executeSql(preparedSQLStatement, valueStatement).catch((error) => {
+                this.logger.error("SYNC store.import SQL::" + entity, error);
+                this.logger.error(preparedSQLStatement, valueStatement);
+
+                //this.logger.error('ORG-DATA', data);
+                return Promise.reject(error);
+              }).then((() => {
+                observer.next();
+              }));
+              promises.push(promise);
+
+            }else{
+              batchStatements.push([preparedSQLStatement, valueStatement]);
+              observer.next();
+            }
+
+            //console.info(preparedSQLStatement);
+            //console.log(JSON.stringify(valueStatement));
+            //batchStatements.push([preparedSQLStatement, valueStatement]);
+            //observer.next();
           }
 
-          return db.sqlBatch(batchStatements);
+          if(this.debugImportWithoutBatch) {
+            return Promise.all(promises);
+          }else {
+            return db.sqlBatch(batchStatements).catch((error) => {
+              this.logger.error("SYNC store.import BATCH::" + entity, error);
+              return Promise.reject(error);
+            })
+          }
       }).then(() => {
         observer.complete();
       }).catch((error) => {
-        this.logger.error("SYNC store.import::" + entity, error);
+        this.logger.error("SYNC store.import FINAL::" + entity, error);
         observer.complete();
       });
     });
@@ -564,6 +636,8 @@ export class Store {
           "INSERT INTO `" + dbName + "` (" + insertFields.join(", ") + ") " +
           "VALUES (" + insertPlaceholders.join(", ") + ")";
 
+        this.logger.info(statement, params);
+
         statements.push([statement, params]);
 
         let queueId : string    = uuid();
@@ -630,7 +704,7 @@ export class Store {
    * Gibt die Queue mit den zu synchronisierenden, lokalen Änderungen zurück
    * @returns {Promise<any[]>}
    */
-  public queueClened(){
+  public queueCleaned(){
     let statement = "" +
       "SELECT * " +
       "FROM `queue` " +
@@ -749,14 +823,21 @@ export class Store {
           let propertyConfig = entityConfig.properties[propertyName];
           switch(propertyConfig.type){
             case 'join':
-              if(object[propertyName + '_id']) {
+            case 'file':
+              let dbName = propertyName + '_id';
+
+              if(propertyConfig['dbfield']){
+                dbName = propertyConfig['dbfield'];
+              }
+
+              if(object[dbName]) {
                 object[propertyName] = {
-                  'id': object[propertyName + '_id']
+                  'id': object[dbName]
                 };
               }else{
                 object[propertyName] = null;
               }
-              delete object[propertyName + '_id'];
+              delete object[dbName];
               break;
             case 'multijoin':
             case 'multifile':
@@ -925,7 +1006,6 @@ export class Store {
     let promises  = [];
     let db        = null;
 
-    this.logger.info("SYNC store.updateSchema START ");
 
     let promise = this.db().then((dbInstance) => {
       //Datenbank wurde geöffnet
@@ -942,18 +1022,18 @@ export class Store {
         "  `mode` TEXT NOT NULL," +
         "  `syncErrors` INTEGER NOT NULL" +
         ")";
+
+
       return db.executeSql(statementQueue, []);
 
     }).then(() => {
       //Tabelle Queue wurde erstellt oder ist bereits vorhanden
-
-      let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
-      let entitiedCreated  = 0;
+      //let entitiesToCreate = Object.keys(schema.data).length - ENTITIES_TO_EXCLUDE.length;
+      //let entitiedCreated  = 0;
 
       if(!this.schema.oldData) {
         for (let key in schema.data) {
           if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
-          this.logger.info("SYNC store.updateSchema CREATE ", key);
           let entityConfig: any = schema.data[key];
 
           promises.push(this.createTableForEntity(db, entityConfig));
@@ -966,13 +1046,9 @@ export class Store {
           let entityConfig: any = schema.data[key];
 
           if (!schema.oldData[key]) {
-            this.logger.info("SYNC store.updateSchema CREATE ", key);
             promises.push(this.createTableForEntity(db, entityConfig));
-
           } else {
-
             let entityOldConfig: any  = schema.oldData[key];
-            this.logger.info("SYNC store.updateSchema UPDATE", key);
             promises.push(this.alterTableForEntity(db, entityConfig, entityOldConfig));
           }
         }

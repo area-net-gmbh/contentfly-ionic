@@ -39,9 +39,10 @@ export class Schema {
     this.storage.remove(STORAGE_SCHEMA);
   }
 
-  update(data: any){
-    this.oldData  = this.data;
-    this.data     = data;
+  update(data: any, permissions: any = {}){
+    this.oldData      = this.data;
+    this.data         = data;
+    this.permissions  = permissions;
   }
 
   save(){

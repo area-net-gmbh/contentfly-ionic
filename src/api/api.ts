@@ -4,13 +4,21 @@ import {User} from "../auth/user";
 import {ApiResponse} from "./response.interface";
 import {API_CONFIG} from "../contentfly.module";
 import {Config} from "./config";
+import {Logger} from "../helper/logger";
+import {RETRY, TIMEOUT, TIMEOUT_FILES} from "../constants";
+import {retry, timeout} from "rxjs/operators";
+
 
 @Injectable()
 export class Api {
 
-  private user : User = null;
+  public debugRequests : boolean  = false;
+  public retry : number           = RETRY;
+  public timeout : number         = TIMEOUT;
+  public timeout_filest : number  = TIMEOUT_FILES;
+  public user : User              = null;
 
-  constructor(@Inject(API_CONFIG) private config: Config, private http: HttpClient) {
+  constructor(@Inject(API_CONFIG) private config: Config, private logger : Logger, private http: HttpClient) {
 
   }
 
@@ -26,8 +34,10 @@ export class Api {
       sizeParam = '/s-' + size;
     }
 
-
-    return this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).toPromise();
+    return this.http.get(this.config.baseUrl + '/file/get/' +  id + sizeParam, { responseType: 'blob' }).pipe(
+      timeout(this.timeout_filest),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -49,8 +59,10 @@ export class Api {
     let params = new FormData();
     params.append('id', id);
     params.append('file', fileData, name);
-
-    return this.http.post(this.config.baseUrl + '/file/upload', params, {headers: headers}).toPromise();
+    return this.http.post(this.config.baseUrl + '/file/upload', params, {headers: headers}).pipe(
+      timeout(this.timeout_filest),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -62,6 +74,8 @@ export class Api {
   public get(endpoint, params = null){
     return this.request('GET', 'api/' + endpoint, params);
   }
+
+
 
   /**
    * Aufruf der Login-API
@@ -81,7 +95,10 @@ export class Api {
       params['loginManager'] = loginManager;
     }
 
-    return this.http.post<ApiResponse>(this.config.baseUrl + '/auth/login', params).toPromise();
+    return this.http.post<ApiResponse>(this.config.baseUrl + '/auth/login', params).pipe(
+      timeout(this.timeout),
+      retry(this.retry)
+    ).toPromise();
   }
 
   /**
@@ -112,13 +129,25 @@ export class Api {
   public request(method, endpoint, params = null) : Promise<Object> {
       let headers = {'Content-Type' : 'application/json'};
       if(this.user.token){
-        headers['APPCMS-TOKEN'] = this.user.token
+        headers['APPCMS-TOKEN'] = this.user.token;
+      }
+
+      if(this.debugRequests){
+        this.logger.info(method + ' ' + this.config.baseUrl + '/' + endpoint, params);
       }
 
       if(method == 'POST'){
-        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers}).toPromise()
+
+        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers}).pipe(
+          timeout(this.timeout),
+          retry(this.retry)
+        ).toPromise();
       } else{
-        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers}).toPromise();
+
+        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers}).pipe(
+          timeout(this.timeout),
+          retry(this.retry)
+        ).toPromise();
       }
   }
 

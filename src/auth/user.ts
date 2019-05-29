@@ -32,6 +32,7 @@ export class User {
     return this.storage.get(STORAGE_USER).then((data) => {
 
       if (data != null) {
+
         this.id = data.user.id;
         this.alias = data.user.alias;
         this.isAdmin = data.user.isAdmin;

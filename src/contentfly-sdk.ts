@@ -16,7 +16,7 @@ import {ApiResponse} from "./api/response.interface";
 @Injectable()
 export class ContentflySdk {
 
-  private forceSyncTo : boolean = true;
+  private forceSyncTo : boolean = false;
 
   constructor(public api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
     this.api.setUser(this.user);
@@ -24,7 +24,6 @@ export class ContentflySdk {
 
     this.syncService.setApi(api);
   }
-
 
   /**
    * Führt mehrere SQL-Commands aus
@@ -51,6 +50,45 @@ export class ContentflySdk {
   }
 
   /**
+   * Anzahl der noch offenen Datensätze vom Sever prüfen
+   */
+  public countFromServer() : Promise<number>{
+    return this.syncService.countFromServer();
+  }
+
+  /**
+   * Umwandlung eines Base64-Strings in einen Blob
+   * @param string b64Data
+   * @param string contentType
+   */
+  private b64toBlob(b64Data, contentType) : Blob {
+
+    let b64plittedData  = b64Data.split(',')
+    let b64RawData      = b64plittedData.length == 2 ? b64plittedData[1] : b64plittedData[0];
+
+    contentType = contentType || '';
+    var sliceSize = 512;
+    var byteCharacters = atob(b64RawData);
+    var byteArrays = [];
+
+    for (var offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+      var slice = byteCharacters.slice(offset, offset + sliceSize);
+
+      var byteNumbers = new Array(slice.length);
+      for (var i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+
+      var byteArray = new Uint8Array(byteNumbers);
+
+      byteArrays.push(byteArray);
+    }
+
+    var blob = new Blob(byteArrays, {type: contentType});
+    return blob;
+  }
+
+  /**
    * Löschen eines Objektes einer bestimmten Entität
    * @param {string} entityName
    * @param {string} id
@@ -62,6 +100,7 @@ export class ContentflySdk {
       return data;
     });
   }
+
 
   /**
    * Speichern eines neuen Objektes einer bestimmten Entität
@@ -110,6 +149,39 @@ export class ContentflySdk {
 
       return newFileId;
     });
+  }
+
+  /**
+   * Speichern einer neuen Datei
+   * @param {string} base64Data
+   * @returns {Promise<any>}
+   */
+  public insertBase64File(base64Data : string, type: string, fileName : string = ''){
+    let data = {
+      'type' : type,
+      'name' : fileName,
+      'hash' : 'local',
+      '_hashLocal' : 'local',
+      'size' : 0,
+      'isIntern': 0
+    };
+
+    let newFileId           = null;
+
+    return this.insert('PIM\\File', data).then((id) => {
+      newFileId = id;
+      let blob = this.b64toBlob(base64Data, type);
+      return this.file.writeFile(this.file.dataDirectory, newFileId, blob, { replace: true })
+    }).then(() => {
+      this.logger.info('FILE SAVED', newFileId);
+      setTimeout( () => {
+        if(this.forceSyncTo) this.silentSync();
+      }, 1000);
+
+      return newFileId;
+    }).catch((error) => {
+      this.logger.error('insertBase64File', error);
+    })
   }
 
 
@@ -165,11 +237,11 @@ export class ContentflySdk {
   }
 
   /**
-   * Gibt die eindeutigen lokal geänderten und zu synchronisierenden Datensätze zurück
+   * Gibt die eindeutig lokal geänderten und zu synchronisierenden Datensätze zurück
    * @returns {Promise<any[]>}
    */
   queueCleaned(){
-    return this.store.queueClened();
+    return this.store.queueCleaned();
   }
 
   /**
@@ -187,7 +259,12 @@ export class ContentflySdk {
    * @returns {Promise<any>}
    */
   public ready(){
-    return this.user.load();
+    return this.user.load().then(() => {
+      this.api.setUser(this.user);
+      this.store.setUser(this.user);
+
+      return Promise.resolve();
+    });
   }
 
   /**
@@ -200,9 +277,34 @@ export class ContentflySdk {
 
   /**
    * Startet die Synchronisierung zum Server ohne Observable-Rückgabe
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    */
-  public silentSync(){
-    this.sync().subscribe(() => {}, () => {}, () =>{});
+  public silentSync(disableSyncFrom : boolean = false){
+    this.sync(disableSyncFrom).subscribe(() => {}, () => {}, () =>{});
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setApiDebugRequests(doDebug : boolean){
+    this.api.debugRequests = doDebug;
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setChunkSize(chunkSize : number){
+    this.syncService.syncChunkSize = chunkSize;
+  }
+
+  /**
+   * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
+   * @param {boolean} doDebug
+   */
+  public setStoreDebugImportWithoutBatch(doDebug : boolean){
+    this.store.debugImportWithoutBatch = doDebug;
   }
 
   /**
@@ -214,6 +316,14 @@ export class ContentflySdk {
   }
 
   /**
+   * Lädt beim Synchronisieren nicht die Original Bilddatei, sondern die entsprechende im Backend definierte Bildgröße
+   * @param {string} sizeName
+   */
+  public setImageDownloadSize(sizeName : string){
+    this.syncService.setImageDownloadSize(sizeName);
+  }
+
+  /**
    * Setzt einen statischen Authentifizierungs-Token "APPCMS-TOKEN"
    * @param {string} token
    */
@@ -222,11 +332,28 @@ export class ContentflySdk {
   }
 
   /**
+   * Startet die Synchronisierung
+   * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
+   * @returns {Observable<Message>}
+   */
+  public sync(disableSyncFrom : boolean = false){
+    return this.syncService.sync(disableSyncFrom);
+  }
+
+  /**
    * Startet die Synchronisierung zum Server
    * @returns {Observable<Message>}
    */
-  public sync(){
-    return this.syncService.sync();
+  public syncTo(){
+    return this.syncService.syncTo();
+  }
+
+  /**
+   * Startet den Synchronisations-Projekt vom Server
+   * @returns {Observable<Message>}
+   */
+  public syncFrom(){
+    return this.syncService.syncFrom();
   }
 
   /**

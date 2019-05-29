@@ -11,6 +11,8 @@ import {Uploader} from "./sync/uploader";
 import {Service} from "./sync/service";
 import {SQLite} from "@ionic-native/sqlite";
 import {File} from "@ionic-native/file";
+import {HTTP_INTERCEPTORS} from "@angular/common/http";
+import {XHRBackend} from "@angular/http";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -42,6 +44,7 @@ export class ContentflyModule {
               Service,
               SQLite,
               File
+              //{ provide: HTTP_INTERCEPTORS, useClass: AbortInterceptor, multi: true },
             ]
         };
     }
