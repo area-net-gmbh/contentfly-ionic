@@ -824,14 +824,20 @@ export class Store {
           switch(propertyConfig.type){
             case 'join':
             case 'file':
-              if(object[propertyName + '_id']) {
+              let dbName = propertyName + '_id';
+
+              if(propertyConfig['dbfield']){
+                dbName = propertyConfig['dbfield'];
+              }
+
+              if(object[dbName]) {
                 object[propertyName] = {
-                  'id': object[propertyName + '_id']
+                  'id': object[dbName]
                 };
               }else{
                 object[propertyName] = null;
               }
-              delete object[propertyName + '_id'];
+              delete object[dbName];
               break;
             case 'multijoin':
             case 'multifile':

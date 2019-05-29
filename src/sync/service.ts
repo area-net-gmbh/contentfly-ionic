@@ -173,12 +173,12 @@ export class Service {
    * Startet die Synchronisation der Dateien
    * @returns {Promise<any[]>}
    */
-  private syncFiles(){
+  private syncFiles() : Promise<boolean>{
     return this.store.query('SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE _hashLocal IS NULL OR hash != _hashLocal', []).then((files) => {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if(!files.length){
-        return Promise.resolve([]);
+        return Promise.resolve(false);
       }
 
       this.dataCount        = files.length;
@@ -194,7 +194,7 @@ export class Service {
         let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
-          let filename : string = file['id'];
+          let filename : string = file['id'] as string;
           let type : string     = file['type'];
 
           if(type && type.substr(0, 5) == 'video'){
@@ -230,7 +230,9 @@ export class Service {
 
       }
 
-      return Promise.all(allPromises);
+      return Promise.all(allPromises).then(() => {
+        return Promise.resolve(true);
+      });
     });
   }
 
@@ -454,8 +456,6 @@ export class Service {
       countLoaded += this.syncState.getLastChunkSize(entityName);
     }
 
-    console.log("LAST CHUNK SIZE = " + countLoaded);
-
     let startPromise  = null;
     let params        = {};
 
@@ -555,10 +555,6 @@ export class Service {
 
       if(this.dataCount == 0){
 
-        this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
-        this.logger.info("Keine neuen Daten vorhanden.");
-
-
         if(countRequest['ts']){
           for (let index in entities) {
             var entity      = entities[index];
@@ -602,16 +598,22 @@ export class Service {
     }).then(() => {
       //Paralle Synchronisierung der Entitäten abgeschlossen
 
-      if(this.dataCount == 0){
-        return Promise.resolve();
-      }
+      return this.syncFiles();
 
-      return this.syncFiles().then(() => {
+    }).then((filesAreSynced) => {
+      //Dateien wurden synchronisiert
 
+      if(filesAreSynced){
         this.data.next(new Message(Mode.FROM, 'Daten wurden erfolgreich synchronisiert.', 0, 0, 0));
         this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
-        return Promise.resolve();
-      });
+
+      }else{
+        this.data.next(new Message(Mode.FROM, 'Keine Änderungen auf dem Server vorhanden.', 0, 0, 0));
+        this.logger.info("Keine neuen Daten vorhanden.");
+      }
+
+      return Promise.resolve();
+
     });
 
   }

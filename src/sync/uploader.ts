@@ -144,6 +144,9 @@ export class Uploader {
             //Details zu Datensatz wurden geladen
 
             objectComplete = data;
+
+
+
             let params = {entity: object.entity, id: object.entity_id, data: objectComplete};
 
             this.logger.info("[upload.start:replace]", params);
