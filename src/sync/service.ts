@@ -191,10 +191,11 @@ export class Service {
       for(let index = 0; index < files.length; index++){
         let file = files[index];
         let size = file['type'] && file['type'].substr(0, 5) == 'image' ? this.imageDownloadSize : null;
+
         let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
-          let filename : string = file['id'] as string;
+          let filename : string = (file['id'] as string) + '';
           let type : string     = file['type'];
 
           if(type && type.substr(0, 5) == 'video'){
@@ -205,7 +206,6 @@ export class Service {
           return this.file.writeFile(this.file.dataDirectory, filename, blob, {replace: true} );
         }).then(() => {
           //Blob wurde lokal gespeichert
-
           let updateData = {
             'id' : file['id'],
             '_hashLocal' : file['hash']
@@ -214,7 +214,6 @@ export class Service {
           return this.store.update('PIM\\File', updateData, true);
         }).then(() => {
           //Datenbank wurde aktualisiert
-
           this.currentDataCount++;
           let progress = Math.round(this.currentDataCount / this.dataCount * 100);
 

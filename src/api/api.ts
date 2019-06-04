@@ -28,7 +28,7 @@ export class Api {
    * @param {string} size
    * @returns {Promise<Blob>}
    */
-  public file(id : string, size : string = null){
+  public file(id : any, size : string = null){
     let sizeParam = '';
     if(size){
       sizeParam = '/s-' + size;
