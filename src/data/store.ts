@@ -28,7 +28,7 @@ export class Store {
    * @param entityOldConfig
    * @returns {Promise<any>}
    */
-  private alterTableForEntity(db: SQLiteObject, entityConfig : any, entityOldConfig : any){
+  private alterTableForEntity(db: SQLiteObject, entityConfig : any, entityOldConfig : any, entityName : string){
 
     this.logger.info("SYNC store.updateSchema UPDATE", entityConfig.settings.dbname);
 
@@ -43,7 +43,12 @@ export class Store {
         continue
       }
       if(entityConfig.properties[property]['type'] == 'join'){
-        tempProperties.push('`' + property + '_id' + '`');
+        if(entityConfig.properties[property]['dbfield']){
+          property =  entityConfig.properties[property]['dbfield'];
+        }else{
+          property =  property + '_id';
+        }
+        tempProperties.push('`' + property + '`');
         continue;
       }
       if(entityConfig.properties[property]['type'] == 'file'){
@@ -55,19 +60,16 @@ export class Store {
       tempProperties.push('`' + property + '`');
     }
 
-
-
     let statements = [
       'CREATE TABLE IF NOT EXISTS temp_' + dbName + ' AS SELECT ' + tempProperties.join(',') + ' FROM ' + dbName,
       'DROP TABLE IF EXISTS ' + dbName
     ];
-
-
+    this.logger.info("SYNC store.updateSchema " + entityConfig.settings.dbname, statements);
     let promise = db.sqlBatch(statements).then(() => {
       //Bestehende Tabelle wurde in Temp-Tabelle kopiert
       this.logger.info("SYNC store.updateSchema " + entityConfig.settings.dbname, 1);
 
-      return this.createTableForEntity(db, entityConfig).catch((error) => {
+      return this.createTableForEntity(db, entityConfig, entityName).catch((error) => {
         db.executeSql('ALTER TABLE temp_' + dbName + ' RENAME TO ' + dbName, []);
         this.logger.error('alterTableForEntity:1', error);
 
@@ -138,7 +140,7 @@ export class Store {
    * @param entityConfig
    * @returns {Promise<void>}
    */
-  private createTableForEntity(db: SQLiteObject, entityConfig : any){
+  private createTableForEntity(db: SQLiteObject, entityConfig : any, entityName : string){
 
     this.logger.info("SYNC store.updateSchema CREATE ", entityConfig.settings.dbname);
 
@@ -153,6 +155,9 @@ export class Store {
         'type' : 'string',
       }
     }
+
+    let entityNameParts : string[]  = entityName.split('\\');
+    let entityNameRaw : string      = entityNameParts.pop().toLowerCase();
 
     for (let property in entityConfig.properties) {
       let propertyConfig: any = entityConfig.properties[property];
@@ -181,7 +186,7 @@ export class Store {
           break;
         case "multifile":
           var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
-          var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `file_id`))";
+          var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + entityNameRaw + "_id` 'TEXT' NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + entityNameRaw + "_id`, `file_id`))";
 
           statements.push([sqlMF, []]);
           break;
@@ -194,8 +199,7 @@ export class Store {
           var joinedEntity = propertyConfig.accept.substr(0, 13) == 'Custom\\Entity'
             ? propertyConfig.accept.substr(14)
             : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
-          var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
-          var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + dbName.replace('_', '') + "_id` TEXT NOT NULL, `" + joinedEntityDbname.replace('_', '') + "_id` TEXT NOT NULL, PRIMARY KEY (`" + dbName.replace('_', '') + "_id`, `" + joinedEntityDbname.replace('_', '') + "_id`))";
+          var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + propertyConfig.dbfield + "` TEXT NOT NULL, `" + propertyConfig.dbfield_foreign + "` TEXT NOT NULL, PRIMARY KEY (`" + propertyConfig.dbfield + "`, `" + propertyConfig.dbfield_foreign + "`))";
 
           statements.push([sql, []]);
 
@@ -486,7 +490,7 @@ export class Store {
         }
 
         let preparedSQLStatement = "REPLACE INTO `" + tableName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
-
+        console.log(preparedSQLStatement);
         let batchStatements : any[] = [];
 
         for (let props of data) {
@@ -782,18 +786,20 @@ export class Store {
             ? propertyConfig.accept.substr(14)
             : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
           var joinedEntityDbname = this.schema.data[joinedEntity].settings.dbname;
+          var dbfield = propertyConfig.dbfield ? propertyConfig.dbfield : dbName.replace('_', '') + '_id';
 
           order.push(propertyName);
-          fields.push(propertyName + '.' + joinedEntityDbname.replace('_', '') + '_id AS ' + propertyName);
-          joins.push('LEFT JOIN ' + joinedTableName + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
+          fields.push('join_' + propertyName + '.' + dbfield + ' AS ' + propertyName);
+          joins.push('LEFT JOIN ' + joinedTableName + ' AS join_' + propertyName + ' ON src.id = join_' + propertyName + '.' + dbfield);
 
         }
 
         if(propertyConfig.type == 'multifile'){
           var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + joinedTableName;
+          var dbfield           = propertyConfig.dbfield ? propertyConfig.dbfield : dbName.replace('_', '') + '_id';
           order.push(propertyName);
           fields.push(propertyName + '.file_id AS ' + propertyName);
-          joins.push('LEFT JOIN ' + joinedTableNameMF + ' AS ' + propertyName + ' ON src.id = ' + propertyName + '.' + dbName.replace('_', '') + '_id');
+          joins.push('LEFT JOIN ' + joinedTableNameMF + ' AS join_' + propertyName + ' ON src.id = join_' + propertyName + '.' + dbfield);
         }
       }
 
@@ -825,7 +831,7 @@ export class Store {
             case 'join':
             case 'file':
               let dbName = propertyName + '_id';
-
+              //userCreated_id
               if(propertyConfig['dbfield']){
                 dbName = propertyConfig['dbfield'];
               }
@@ -1036,7 +1042,7 @@ export class Store {
           if(ENTITIES_TO_EXCLUDE.indexOf(key) >= 0) continue;
           let entityConfig: any = schema.data[key];
 
-          promises.push(this.createTableForEntity(db, entityConfig));
+          promises.push(this.createTableForEntity(db, entityConfig, key));
 
         }
       }else{
@@ -1046,10 +1052,10 @@ export class Store {
           let entityConfig: any = schema.data[key];
 
           if (!schema.oldData[key]) {
-            promises.push(this.createTableForEntity(db, entityConfig));
+            promises.push(this.createTableForEntity(db, entityConfig, key));
           } else {
             let entityOldConfig: any  = schema.oldData[key];
-            promises.push(this.alterTableForEntity(db, entityConfig, entityOldConfig));
+            promises.push(this.alterTableForEntity(db, entityConfig, entityOldConfig, key));
           }
         }
       }

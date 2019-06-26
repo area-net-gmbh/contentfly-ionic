@@ -328,17 +328,25 @@ export class Service {
    */
   private syncFromEntity(entityName : string, lastSyncDate : string, startFromChunk : number){
 
-    let params = {
+    var entityConfig = this.schema.data[entityName];
+    let dbname       = entityConfig.settings.dbname;
+
+    var from = {};
+    from[dbname] = 'src';
+
+    let params : any = {
       select: '*',
-      from: entityName,
+      from: from,
       setMaxResults: this.syncChunkSize,
       setFirstResult: this.syncState.getLastChunkSize(entityName)
     };
 
+
     var entityConfig = this.schema.data[entityName];
     if(entityConfig['settings']['type'] == 'tree'){
       let joinTableName = entityConfig['settings']['i18n'] ? 'pim_i18n_tree' : 'pim_tree';
-      params['leftJoin'] = [entityName, joinTableName, 'j', entityName + '.id = j.id'];
+
+      params['leftJoin'] = ['src', joinTableName, 'j',  'src.id = j.id'];
     }
 
     if(lastSyncDate){
