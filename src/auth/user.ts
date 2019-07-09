@@ -40,7 +40,7 @@ export class User {
         this.email = data.user.email;
         this.data = data.data;
         this.token = data.token;
-        this.group_id = data.group_id;
+        this.group_id = data.user.group ? data.user.group.id : null;
       }
 
       return Promise.resolve();

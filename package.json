@@ -1,6 +1,6 @@
 {
   "name": "contentfly-ionic",
-  "version": "0.61.0",
+  "version": "1.0.0",
   "description": "Contentfly SDK for Ionic",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
@@ -18,7 +18,7 @@
   },
   "keywords": [],
   "author": "AREA-NET GmbH",
-  "license": "AGPL-3.0-or-later",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/area-net-gmbh/contentfly-ionic/issues"
   },
