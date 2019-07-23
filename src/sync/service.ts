@@ -174,7 +174,7 @@ export class Service {
    * @returns {Promise<any[]>}
    */
   private syncFiles() : Promise<boolean>{
-    return this.store.query('SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE _hashLocal IS NULL OR hash != _hashLocal', []).then((files) => {
+    return this.store.query("SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'", []).then((files) => {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if(!files.length){

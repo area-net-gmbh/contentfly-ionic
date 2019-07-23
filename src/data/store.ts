@@ -189,7 +189,7 @@ export class Store {
           var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + entityNameRaw + "_id` 'TEXT' NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + entityNameRaw + "_id`, `file_id`))";
 
           statements.push([sqlMF, []]);
-          break;
+          continue;
         case "multijoin":
           if(!propertyConfig.foreign){
             continue;
@@ -490,7 +490,7 @@ export class Store {
         }
 
         let preparedSQLStatement = "REPLACE INTO `" + tableName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
-        console.log(preparedSQLStatement);
+
         let batchStatements : any[] = [];
 
         for (let props of data) {
