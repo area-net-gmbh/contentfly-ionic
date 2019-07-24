@@ -356,110 +356,110 @@ export class Store {
     let observer = new Observable(observer => {
 
       this.db().then((db) => {
-          let properties : any[] = this.schema.data[entity].properties;
-          let dbName : string    = this.schema.data[entity].settings.dbname;
+        let properties : any[] = this.schema.data[entity].properties;
+        let dbName : string    = this.schema.data[entity].settings.dbname;
 
-          let dbfield2field : {}                = {};
-          let fieldsStatement : string[]        = [];
-          let placeholderStatement : string[]   = [];
+        let dbfield2field : {}                = {};
+        let fieldsStatement : string[]        = [];
+        let placeholderStatement : string[]   = [];
 
 
-          for (let propertyKey in properties) {
+        for (let propertyKey in properties) {
 
-            let propertyConfig : any[] = properties[propertyKey];
-            let type : string = propertyConfig['type'];
-            if(type == "multijoin" || type == "multifile"){
-              continue
-            }
-
-            let dbfield = propertyKey;
-
-            if(type == "file" || type == "join"){
-              if(propertyConfig['dbfield']){
-                dbfield =  propertyConfig['dbfield'];
-                dbfield2field[dbfield] = propertyKey;
-
-              }else{
-                dbfield = propertyKey + '_id';
-                dbfield2field[dbfield] = propertyKey;
-              }
-
-            }
-
-            fieldsStatement.push(dbfield);
-            placeholderStatement.push("?");
+          let propertyConfig : any[] = properties[propertyKey];
+          let type : string = propertyConfig['type'];
+          if(type == "multijoin" || type == "multifile"){
+            continue
           }
 
-          let preparedSQLStatement = "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
+          let dbfield = propertyKey;
 
-          let batchStatements : any[] = [];
-
-          let promises = [];
-
-          for (let props of data) {
-
-            let valueStatement: any[] = [];
-
-            for (let field in props) {
-              let rawValue = props[field];
-
-              let stmtColInt = fieldsStatement.indexOf(field);
-              let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
-
-              let propertyConfig = properties[fieldForConfig];
-
-              if (stmtColInt == -1 || !propertyConfig) {
-                continue;
-              }
-
-              let type: string = propertyConfig['type'];
-
-              switch(type){
-                case 'multijoin':
-                case 'multifile':
-                  break;
-                case "checkbox":
-                case "boolean":
-                  valueStatement[stmtColInt] = this.boolVal2Int(rawValue);
-                  break;
-                default:
-                  valueStatement[stmtColInt] = rawValue;
-                  break;
-              }
-
-            }
-            if(this.debugImportWithoutBatch){
-
-              let promise = db.executeSql(preparedSQLStatement, valueStatement).catch((error) => {
-                this.logger.error("SYNC store.import SQL::" + entity, error);
-                this.logger.error(preparedSQLStatement, valueStatement);
-
-                //this.logger.error('ORG-DATA', data);
-                return Promise.reject(error);
-              }).then((() => {
-                observer.next();
-              }));
-              promises.push(promise);
+          if(type == "file" || type == "join"){
+            if(propertyConfig['dbfield']){
+              dbfield =  propertyConfig['dbfield'];
+              dbfield2field[dbfield] = propertyKey;
 
             }else{
-              batchStatements.push([preparedSQLStatement, valueStatement]);
-              observer.next();
+              dbfield = propertyKey + '_id';
+              dbfield2field[dbfield] = propertyKey;
             }
 
-            //console.info(preparedSQLStatement);
-            //console.log(JSON.stringify(valueStatement));
-            //batchStatements.push([preparedSQLStatement, valueStatement]);
-            //observer.next();
           }
 
-          if(this.debugImportWithoutBatch) {
-            return Promise.all(promises);
-          }else {
-            return db.sqlBatch(batchStatements).catch((error) => {
-              this.logger.error("SYNC store.import BATCH::" + entity, error);
-              return Promise.reject(error);
-            })
+          fieldsStatement.push(dbfield);
+          placeholderStatement.push("?");
+        }
+
+        let preparedSQLStatement = "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
+
+        let batchStatements : any[] = [];
+
+        let promises = [];
+
+        for (let props of data) {
+
+          let valueStatement: any[] = [];
+
+          for (let field in props) {
+            let rawValue = props[field];
+
+            let stmtColInt = fieldsStatement.indexOf(field);
+            let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
+
+            let propertyConfig = properties[fieldForConfig];
+
+            if (stmtColInt == -1 || !propertyConfig) {
+              continue;
+            }
+
+            let type: string = propertyConfig['type'];
+
+            switch(type){
+              case 'multijoin':
+              case 'multifile':
+                break;
+              case "checkbox":
+              case "boolean":
+                valueStatement[stmtColInt] = this.boolVal2Int(rawValue);
+                break;
+              default:
+                valueStatement[stmtColInt] = rawValue;
+                break;
+            }
+
           }
+          if(this.debugImportWithoutBatch){
+
+            let promise = db.executeSql(preparedSQLStatement, valueStatement).catch((error) => {
+              this.logger.error("SYNC store.import SQL::" + entity, error);
+              this.logger.error(preparedSQLStatement, valueStatement);
+
+              //this.logger.error('ORG-DATA', data);
+              return Promise.reject(error);
+            }).then((() => {
+              observer.next();
+            }));
+            promises.push(promise);
+
+          }else{
+            batchStatements.push([preparedSQLStatement, valueStatement]);
+            observer.next();
+          }
+
+          //console.info(preparedSQLStatement);
+          //console.log(JSON.stringify(valueStatement));
+          //batchStatements.push([preparedSQLStatement, valueStatement]);
+          //observer.next();
+        }
+
+        if(this.debugImportWithoutBatch) {
+          return Promise.all(promises);
+        }else {
+          return db.sqlBatch(batchStatements).catch((error) => {
+            this.logger.error("SYNC store.import BATCH::" + entity, error);
+            return Promise.reject(error);
+          })
+        }
       }).then(() => {
         observer.complete();
       }).catch((error) => {
@@ -798,7 +798,7 @@ export class Store {
           var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + joinedTableName;
           var dbfield           = propertyConfig.dbfield ? propertyConfig.dbfield : dbName.replace('_', '') + '_id';
           order.push(propertyName);
-          fields.push(propertyName + '.file_id AS ' + propertyName);
+          fields.push('join_' + propertyName + '.file_id AS ' + propertyName);
           joins.push('LEFT JOIN ' + joinedTableNameMF + ' AS join_' + propertyName + ' ON src.id = join_' + propertyName + '.' + dbfield);
         }
       }
