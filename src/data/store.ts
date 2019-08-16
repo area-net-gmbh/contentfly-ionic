@@ -243,6 +243,7 @@ export class Store {
     return db.sqlBatch(statements).then(() => {
       return Promise.resolve();
     }).catch((error) => {
+      this.logger.error('SYNC store.updateSchema CREATE:: ' + entityConfig.settings.dbname, error);
       if(error.code == 5){
         return Promise.resolve();
       }else{
