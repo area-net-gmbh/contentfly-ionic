@@ -142,7 +142,7 @@ export class Store {
    */
   private createTableForEntity(db: SQLiteObject, entityConfig : any, entityName : string){
 
-    this.logger.info("SYNC store.updateSchema CREATE ", entityConfig.settings.dbname);
+    this.logger.info("SYNC store.updateSchema CREATE(" + this.debugImportWithoutBatch + ")", entityConfig.settings.dbname);
 
     let dbName: string = entityConfig.settings.dbname;
     let createTableString: string = "CREATE TABLE `" + dbName + "` (";
@@ -158,6 +158,8 @@ export class Store {
 
     let entityNameParts : string[]  = entityName.split('\\');
     let entityNameRaw : string      = entityNameParts.pop().toLowerCase();
+
+    let promises = [];
 
     for (let property in entityConfig.properties) {
       let propertyConfig: any = entityConfig.properties[property];
@@ -188,7 +190,22 @@ export class Store {
           var joinedTableNameMF = propertyConfig.foreign ? propertyConfig.foreign :  propertyConfig.dbName + "_" + property;
           var sqlMF = "CREATE TABLE IF NOT EXISTS `" + joinedTableNameMF + "` (`" + entityNameRaw + "_id` 'TEXT' NOT NULL, `file_id` TEXT NOT NULL, PRIMARY KEY (`" + entityNameRaw + "_id`, `file_id`))";
 
-          statements.push([sqlMF, []]);
+
+          if(this.debugImportWithoutBatch){
+            this.logger.info("==> ", sqlMF);
+            let promise = db.executeSql(sqlMF, []).catch((error) => {
+              this.logger.error("SYNC store.updateSchema CREATE::" + entityConfig.settings.dbname + '/' + joinedTableNameMF, error);
+              //this.logger.error('ORG-DATA', data);
+              return Promise.reject(error);
+            }).then((() => {
+
+            }));
+
+            promises.push(promise);
+          }else{
+            statements.push([sqlMF, []]);
+          }
+
           continue;
         case "multijoin":
           if(!propertyConfig.foreign){
@@ -201,7 +218,22 @@ export class Store {
             : propertyConfig.accept.replace('Areanet\\PIM\\Entity', 'PIM');
           var sql = "CREATE TABLE IF NOT EXISTS `" + joinedTableName + "` (`" + propertyConfig.dbfield + "` TEXT NOT NULL, `" + propertyConfig.dbfield_foreign + "` TEXT NOT NULL, PRIMARY KEY (`" + propertyConfig.dbfield + "`, `" + propertyConfig.dbfield_foreign + "`))";
 
-          statements.push([sql, []]);
+          if(this.debugImportWithoutBatch){
+            this.logger.info("==> ", sql);
+
+            let promise = db.executeSql(sql, []).catch((error) => {
+              this.logger.error("SYNC store.updateSchema CREATE::" + entityConfig.settings.dbname + '/' + joinedTableName, error);
+              //this.logger.error('ORG-DATA', data);
+              return Promise.reject(error);
+            }).then((() => {
+
+            }));
+
+            promises.push(promise);
+          }else{
+            statements.push([sql, []]);
+          }
+
 
           continue;
         case "decimal":
@@ -238,18 +270,40 @@ export class Store {
     createTableString += propertiesCreateStatement.join(", ");
     createTableString += ")";
 
-    statements.push([createTableString, []]);
+    if(this.debugImportWithoutBatch){
+      this.logger.info("==> ", createTableString);
+      let promise = db.executeSql(createTableString, []).catch((error) => {
+        this.logger.error("SYNC store.updateSchema CREATE::" + entityConfig.settings.dbname, error);
 
-    return db.sqlBatch(statements).then(() => {
-      return Promise.resolve();
-    }).catch((error) => {
-      this.logger.error('SYNC store.updateSchema CREATE:: ' + entityConfig.settings.dbname, error);
-      if(error.code == 5){
-        return Promise.resolve();
-      }else{
+        //this.logger.error('ORG-DATA', data);
         return Promise.reject(error);
-      }
-    });
+      }).then((() => {
+
+      }));
+
+      promises.push(promise);
+
+    }else{
+      statements.push([createTableString, []]);
+    }
+
+
+    if(this.debugImportWithoutBatch) {
+      return Promise.all(promises);
+    }else {
+      return db.sqlBatch(statements).then(() => {
+        return Promise.resolve();
+      }).catch((error) => {
+        this.logger.error('SYNC store.updateSchema CREATE:: ' + entityConfig.settings.dbname, error);
+        if(error.code == 5){
+          return Promise.resolve();
+        }else{
+          return Promise.reject(error);
+        }
+      });
+    }
+
+
   }
 
   /**
