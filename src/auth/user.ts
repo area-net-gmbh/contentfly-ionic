@@ -9,6 +9,7 @@ export class User {
   alias: string = null;
   email: string = null;
   group_id: string = null;
+  group : any  = {};
   isAdmin: boolean = false;
   token: string = null;
   data: any = {};
@@ -41,6 +42,7 @@ export class User {
         this.data = data.data;
         this.token = data.token;
         this.group_id = data.user.group ? data.user.group.id : null;
+        this.group = data.user.group;
       }
 
       return Promise.resolve();
@@ -59,6 +61,7 @@ export class User {
     this.data     = data.data;
     this.token    = data.token;
     this.group_id = data.user.group ? data.user.group.id : null;
+    this.group    = data.user.group;
     this.storage.set(STORAGE_USER, data);
   }
 
@@ -82,6 +85,7 @@ export class User {
     this.token    = null;
     this.data     = {};
     this.group_id = null;
+    this.group    = {};
 
     this.storage.remove(STORAGE_USER);
   }
