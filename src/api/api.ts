@@ -129,12 +129,9 @@ export class Api {
   public request(method, endpoint, params = null) : Promise<Object> {
       let headers = {
         'Content-Type' : 'application/json',
-        'Access-Control-Allow-Origin':'*',
-        'Access-Control-Allow-Methods':'GET,POST,OPTIONS',
-        'Access-Control-Allow-Headers': 'content-type, x-xsrf-token, appcms-token, authorization'
-
+        'contentfly-ionic': 'sdk'
       };
-
+      
       if(this.user.token){
         headers['APPCMS-TOKEN'] = this.user.token;
       }
@@ -145,13 +142,13 @@ export class Api {
 
       if(method == 'POST'){
 
-        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers, withCredentials: true}).pipe(
+        return this.http.post(this.config.baseUrl + '/' + endpoint, params, {headers: headers}).pipe(
           timeout(this.timeout),
           retry(this.retry)
         ).toPromise();
       } else{
 
-        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers, withCredentials: true}).pipe(
+        return this.http.get(this.config.baseUrl + '/' + endpoint, {headers: headers}).pipe(
           timeout(this.timeout),
           retry(this.retry)
         ).toPromise();

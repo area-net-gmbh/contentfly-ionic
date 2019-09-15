@@ -197,9 +197,7 @@ export class Store {
               this.logger.error("SYNC store.updateSchema CREATE::" + entityConfig.settings.dbname + '/' + joinedTableNameMF, error);
               //this.logger.error('ORG-DATA', data);
               return Promise.reject(error);
-            }).then((() => {
-
-            }));
+            });
 
             promises.push(promise);
           }else{
@@ -225,9 +223,7 @@ export class Store {
               this.logger.error("SYNC store.updateSchema CREATE::" + entityConfig.settings.dbname + '/' + joinedTableName, error);
               //this.logger.error('ORG-DATA', data);
               return Promise.reject(error);
-            }).then((() => {
-
-            }));
+            });
 
             promises.push(promise);
           }else{
@@ -277,9 +273,7 @@ export class Store {
 
         //this.logger.error('ORG-DATA', data);
         return Promise.reject(error);
-      }).then((() => {
-
-      }));
+      });
 
       promises.push(promise);
 
@@ -445,7 +439,13 @@ export class Store {
           placeholderStatement.push("?");
         }
 
-        let preparedSQLStatement = "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
+        let preparedSQLStatement = "" +
+          "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") " +
+          "SELECT " + placeholderStatement.join(",") + " " +
+          "WHERE NOT EXISTS ( " +
+          "  SELECT id FROM queue" +
+          "  WHERE entity_id = ?" +
+          ");";
 
         let batchStatements : any[] = [];
 
