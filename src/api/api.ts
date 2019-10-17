@@ -131,7 +131,7 @@ export class Api {
         'Content-Type' : 'application/json',
         'contentfly-ionic': 'sdk'
       };
-      
+
       if(this.user.token){
         headers['APPCMS-TOKEN'] = this.user.token;
       }

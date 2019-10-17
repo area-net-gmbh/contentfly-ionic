@@ -60,6 +60,10 @@ export class Store {
       tempProperties.push('`' + property + '`');
     }
 
+    if(dbName == 'pim_file'){
+      tempProperties.push('_hashLocal');
+    }
+
     let statements = [
       'CREATE TABLE IF NOT EXISTS temp_' + dbName + ' AS SELECT ' + tempProperties.join(',') + ' FROM ' + dbName,
       'DROP TABLE IF EXISTS ' + dbName
