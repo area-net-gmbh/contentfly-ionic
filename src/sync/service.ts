@@ -189,7 +189,10 @@ export class Service {
       this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', 0, 1, this.dataCount));
 
       for(let index = 0; index < files.length; index++){
+
         let file = files[index];
+
+
         let size = file['type'] && file['type'].substr(0, 5) == 'image' ? this.imageDownloadSize : null;
 
         let p = this.api.file(file['id'], size).then((blob) => {
@@ -202,7 +205,7 @@ export class Service {
             let typeParts = type.split('/');
             filename = filename + '.' + typeParts[1];
           }
-          this.logger.info('[sync.service->syncFiles] loaded from api ', file['id']);
+
           return this.file.writeFile(this.file.dataDirectory, filename, blob, {replace: true} );
         }).then(() => {
           //Blob wurde lokal gespeichert
@@ -210,13 +213,13 @@ export class Service {
             'id' : file['id'],
             '_hashLocal' : file['hash']
           };
-          this.logger.info('[sync.service->syncFiles] save to dataDirectory ', file['id']);
+
           return this.store.update('PIM\\File', updateData, true);
         }).then(() => {
           //Datenbank wurde aktualisiert
           this.currentDataCount++;
           let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-          this.logger.info('[sync.service->syncFiles] updated db ', file['id']);
+
           this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
 
           return Promise.resolve();
