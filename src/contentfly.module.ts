@@ -9,10 +9,9 @@ import {Logger} from "./helper/logger";
 import {ContentflySdk} from "./contentfly-sdk";
 import {Uploader} from "./sync/uploader";
 import {Service} from "./sync/service";
-import {SQLite} from "@ionic-native/sqlite";
-import {File} from "@ionic-native/file";
+import {SQLite} from "@ionic-native/sqlite/ngx";
+import {File} from "@ionic-native/file/ngx";
 import {HTTP_INTERCEPTORS} from "@angular/common/http";
-import {XHRBackend} from "@angular/http";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -44,7 +43,6 @@ export class ContentflyModule {
               Service,
               SQLite,
               File
-              //{ provide: HTTP_INTERCEPTORS, useClass: AbortInterceptor, multi: true },
             ]
         };
     }

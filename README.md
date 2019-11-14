@@ -23,6 +23,11 @@ Für die Entwicklung von Apps auf Basis des Contentfly CMS  sind folgende Kenntn
 
 # Ionic SDK
 
+## Release-Notes
+
+- Version 2.x => Ionic 4
+- Version 1.x => Ionic 3
+
 ## Installation
 
 **Installation per NPM**

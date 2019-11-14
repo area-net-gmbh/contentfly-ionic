@@ -1,6 +1,6 @@
 import {Injectable} from "@angular/core";
-import {Events} from "ionic-angular";
 import {CONTENTFLY_NEW_LOGMESSAGE} from "../constants";
+import {Events} from "@ionic/angular";
 
 @Injectable()
 export class Logger {

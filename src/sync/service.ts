@@ -12,12 +12,12 @@ import {Schema} from "../data/schema";
 import {SyncState} from "./syncstate";
 import {Api} from "../api/api";
 import {Logger} from "../helper/logger";
-import {File} from "@ionic-native/file";
+import {File} from "@ionic-native/file/ngx";
 import {Uploader} from "./uploader";
-import {BehaviorSubject} from "rxjs/BehaviorSubject";
-import { Observable } from "rxjs/Observable";
-import {Events} from "ionic-angular";
-import {P} from "@angular/core/src/render3";
+
+import {BehaviorSubject} from "rxjs/internal/BehaviorSubject";
+import {Observable} from "rxjs/internal/Observable";
+import {Events} from "@ionic/angular";
 
 
 @Injectable()

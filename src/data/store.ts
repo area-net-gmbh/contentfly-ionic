@@ -1,12 +1,12 @@
 import {Injectable} from "@angular/core";
 import {Schema} from "./schema";
-import {SQLite, SQLiteObject} from "@ionic-native/sqlite";
+import {SQLite, SQLiteObject} from "@ionic-native/sqlite/ngx";
 import {DB_NAME, ENTITIES_TO_EXCLUDE} from "../constants";
-import {Observable} from "rxjs/Observable";
 import {Logger} from "../helper/logger";
 import uuid  from 'uuid/v1';
 import {QueueType} from "./queuetype";
 import {User} from "../auth/user";
+import {Observable} from "rxjs/internal/Observable";
 
 
 

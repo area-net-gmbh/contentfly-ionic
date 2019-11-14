@@ -3,7 +3,7 @@ import {Store} from "../data/store";
 import {QueueType} from "../data/queuetype";
 import {Api} from "../api/api";
 import {Logger} from "../helper/logger";
-import {File} from "@ionic-native/file";
+import {File} from "@ionic-native/file/ngx";
 
 @Injectable()
 export class Uploader {

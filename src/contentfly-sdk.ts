@@ -5,13 +5,13 @@ import {Store} from "./data/store";
 import {Schema} from "./data/schema";
 import {STORAGE_COMMANDS_INDEX} from "./constants";
 import {SyncState} from "./sync/syncstate";
-import {Observable} from "rxjs/Observable";
 import {Logger} from "./helper/logger";
 import {Storage} from "@ionic/storage";
-import {File} from "@ionic-native/file";
 import {Service} from "./sync/service";
 import {Message} from "./sync/message";
 import {ApiResponse} from "./api/response.interface";
+import {Observable} from "rxjs/internal/Observable";
+import {File} from "@ionic-native/file/ngx";
 
 @Injectable()
 export class ContentflySdk {
@@ -140,6 +140,7 @@ export class ContentflySdk {
       newFileId = id;
       return id;
     }).then((id) => {
+
       return this.file.copyFile(correctPath, currentName, this.file.dataDirectory, id);
     }).then((fileEntry) => {
       this.logger.info('FILE SAVED', newFileId);
