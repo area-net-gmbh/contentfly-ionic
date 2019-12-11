@@ -12,17 +12,19 @@ import {File} from "@ionic-native/file";
 import {Service} from "./sync/service";
 import {Message} from "./sync/message";
 import {ApiResponse} from "./api/response.interface";
+import {Stats} from "./data/stats";
 
 @Injectable()
 export class ContentflySdk {
 
   private forceSyncTo : boolean = false;
 
-  constructor(public api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
+  constructor(public api : Api, private file : File, private logger : Logger, private schema : Schema, private syncService : Service, public stats : Stats, private storage : Storage, private store: Store, private syncState : SyncState, public user : User) {
     this.api.setUser(this.user);
     this.store.setUser(this.user);
 
     this.syncService.setApi(api);
+    this.stats.setApi(api);
   }
 
   /**

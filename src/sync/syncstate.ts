@@ -20,6 +20,10 @@ export class SyncState {
     return this.get(entityName, 'ts', null);
   }
 
+  getStartSyncDate(entityName : string) : string{
+    return this.get(entityName, 'tsstart', null);
+  }
+
   getLastSyncToDate(){
     return this.data['tsto'] ? this.data['tsto'] : null;
   }
@@ -42,6 +46,10 @@ export class SyncState {
 
   setLastSyncToDate(ts : string){
     this.data['tsto'] = ts;
+  }
+
+  setStartSyncDate(entityName : string, ts : string){
+    this.set(entityName, 'tsstart', ts);
   }
 
   setLastSyncStartDate(){

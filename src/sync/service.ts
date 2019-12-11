@@ -186,7 +186,7 @@ export class Service {
 
       let allPromises = [];
 
-      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', 0, 1, this.dataCount));
+      this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', 0, 1, this.dataCount, 'synchronisiert'));
 
       for(let index = 0; index < files.length; index++){
 
@@ -220,7 +220,7 @@ export class Service {
           this.currentDataCount++;
           let progress = Math.round(this.currentDataCount / this.dataCount * 100);
 
-          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
+          this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', progress, this.currentDataCount, this.dataCount, 'synchronisiert'));
 
           return Promise.resolve();
         }).catch((error) => {
@@ -272,6 +272,9 @@ export class Service {
 
     return this.api.post('query', params).then((request) => {
       //Datensätze seit letzter Synchronisierung wurden ermittelt
+      if(!this.syncState.getStartSyncDate(key)){
+        this.syncState.setStartSyncDate(key, request['ts']);
+      }
 
       let data: any[] = request['data'] ? request['data'] : [];
 
@@ -285,7 +288,7 @@ export class Service {
               this.currentDataCount++;
               let progress = Math.round(this.currentDataCount / this.dataCount * 100);
 
-              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount, 'synchronisiert'));
             },
             (error) => {
               this.logger.error('[sync.service->syncFromEntity] store.import', error);
@@ -311,7 +314,7 @@ export class Service {
         //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
 
         this.syncState.setLastChunkSize(key, 0);
-        this.syncState.setLastSyncDate(key, request['ts']);
+        this.syncState.setLastSyncDate(key, this.syncState.getStartSyncDate(key));
         this.syncState.save();
 
         //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
@@ -359,6 +362,9 @@ export class Service {
 
     return this.api.post('query', params).then((request) => {
       //Datensätze seit letzter Synchronisierung wurden ermittelt
+      if(!this.syncState.getStartSyncDate(entityName)){
+        this.syncState.setStartSyncDate(entityName, request['ts']);
+      }
 
       let data: any[] = request['data'] ? request['data'] : [];
 
@@ -372,7 +378,7 @@ export class Service {
               this.currentDataCount++;
               let progress = Math.round(this.currentDataCount / this.dataCount * 100);
 
-              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount));
+              this.data.next(new Message(Mode.FROM, 'Datensätze werden synchronisiert...', progress, this.currentDataCount, this.dataCount, 'synchronisiert'));
             },
             (error) => {
               this.logger.error('[sync.service->syncFromEntity] store.import', error);
@@ -399,7 +405,7 @@ export class Service {
         //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
 
         this.syncState.setLastChunkSize(entityName, 0);
-        this.syncState.setLastSyncDate(entityName, request['ts']);
+        this.syncState.setLastSyncDate(entityName, this.syncState.getStartSyncDate(entityName));
         this.syncState.save();
 
         //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
@@ -421,9 +427,11 @@ export class Service {
 
     this.data = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisiereung...'));
 
-    let promise = disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
+    let promiseSchema = Object.keys(this.schema.data).length == 0 ? this.updateSchema() : Promise.resolve();
 
-    promise.then(() => {
+    promiseSchema.then(() => {
+      return disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
+    }).then(() => {
       return disableSyncFrom || disableSyncTo ? Promise.resolve() : this.startSyncFrom();
     }).then(() => {
       if(disableSyncFrom){
@@ -455,15 +463,19 @@ export class Service {
 
     this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...'));
 
-    let countParams: {}       = {};
-    let countLoaded : number  = 0;
+    let countParams: {}           = {};
+    let countLoaded : number      = 0;
+    let entitiesToSync : number   = 1;
+
     //Lade letzte Synchronisations-Datum zu jeder Entität
     for (let entityName in this.schema.data) {
-      if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
+      let entityConfig = this.schema.data[entityName];
+
+      if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig['settings']['excludeFromSync']) continue;
       if (this.syncState.getLastSyncDate(entityName)) {
         countParams[entityName] = this.syncState.getLastSyncDate(entityName);
       }
-
+      entitiesToSync++;
       countLoaded += this.syncState.getLastChunkSize(entityName);
     }
 
@@ -492,8 +504,55 @@ export class Service {
       }
     }).then(() => {
       //Alte Datensätze wurden gelöscht
+      let entitiesSynced : number = 0;
 
-      return this.api.post('count', params);
+      this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...', Math.round(entitiesSynced/entitiesToSync*100), entitiesSynced, entitiesToSync, 'geprüft'));
+
+      let countRequestAll = {
+        'data' : {
+          'dataCount'  : 0,
+          'filesCount' : 0,
+          'filesSize'  : 0,
+        },
+        'hash' : null
+      };
+
+      let promises  = [];
+
+      for (let entityName in this.schema.data) {
+        let entityConfig = this.schema.data[entityName];
+
+        if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig['settings']['excludeFromSync']) continue;
+
+
+        params['entity'] = entityName;
+        let p = this.api.post('count', params).then((countRequest) => {
+          countRequestAll['data']['dataCount'] += countRequest['data']['dataCount'];
+          countRequestAll['hash']       = countRequest['hash'];
+          entitiesSynced++;
+          this.logger.info("[service.startSyncFrom] OK", countRequest);
+          this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...', Math.round(entitiesSynced/entitiesToSync*100), entitiesSynced, entitiesToSync, 'geprüft'));
+        });
+
+        promises.push(p);
+
+      }
+
+      params['entity'] = 'PIM\\File';
+      let p = this.api.post('count', params).then((countRequest) => {
+        countRequestAll['data']['filesCount'] += countRequest['data']['filesCount'];
+        countRequestAll['data']['filesSize']  += countRequest['data']['filesSize'];
+        countRequestAll['hash']        = countRequest['hash'];
+        entitiesSynced++;
+
+        this.logger.info("[service.startSyncFrom] OK", countRequest);
+        this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...', Math.round(entitiesSynced/entitiesToSync*100), entitiesSynced, entitiesToSync, 'geprüft'));
+      });
+      promises.push(p);
+
+      return Promise.all(promises).then(() => {
+        return Promise.resolve(countRequestAll);
+      })
     }).then((countRequestFromPromise) => {
       //Anzahl der geänderten Datensätze wurde ermittelt, gegebenenfalls wird Update des Schemas durchgeführt
       countRequest = countRequestFromPromise;
@@ -514,13 +573,16 @@ export class Service {
       for (let entityName in this.schema.data) {
         if(ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0) continue;
 
+        var entityConfig = this.schema.data[entityName];
+
+        if(entityConfig['settings']['excludeFromSync']) continue;
+
         if(this.schema.permissions[entityName]){
           if(!this.schema.permissions[entityName]['readable']) continue;
         }
 
         entities.push({key: entityName, entityName: entityName, isMultijoin: false});
 
-        var entityConfig = this.schema.data[entityName];
         for (let property in entityConfig.properties) {
           var propertyConfig: any = entityConfig.properties[property];
           var type: string = propertyConfig.type;
@@ -635,7 +697,7 @@ export class Service {
    */
   private startSyncTo() {
     this.logger.info("[service.startSyncTo]", "started");
-    this.data = new BehaviorSubject(new Message(Mode.TO, 'Prüfe lokale Änderungen...'));
+    this.data.next((new Message(Mode.TO, 'Prüfe lokale Änderungen...')));
     return this.startSyncToProc();
   }
 
@@ -792,6 +854,8 @@ export class Service {
    */
   private updateSchema(){
     return this.api.get('schema').then((schema) => {
+      this.data.next(new Message(Mode.FROM, 'Datenbank aktualisieren...'));
+      this.logger.info("SYNC store.updateSchema START");
       this.schema.update(schema['data'], schema['permissions']);
       return this.store.updateSchema(this.schema);
     }).then( () => {

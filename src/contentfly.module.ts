@@ -13,6 +13,7 @@ import {SQLite} from "@ionic-native/sqlite";
 import {File} from "@ionic-native/file";
 import {HTTP_INTERCEPTORS} from "@angular/common/http";
 import {XHRBackend} from "@angular/http";
+import {Stats} from "./data/stats";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -35,6 +36,7 @@ export class ContentflyModule {
               {provide: API_CONFIG, useValue: config},
               ContentflySdk,
               Api,
+              Stats,
               Store,
               SyncState,
               User,
@@ -44,7 +46,6 @@ export class ContentflyModule {
               Service,
               SQLite,
               File
-              //{ provide: HTTP_INTERCEPTORS, useClass: AbortInterceptor, multi: true },
             ]
         };
     }

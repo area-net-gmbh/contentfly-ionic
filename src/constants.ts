@@ -3,6 +3,7 @@ export const CONTENTFLY_NEW_LOGMESSAGE        = "CONTENTFLY_NEW_LOGMESSAGE";
 export const CONTENTFLY_SYNC_SUCCESS          = "CONTENTFLY_SYNC_SUCCESS";
 
 export const DB_NAME : string                 = "contentfly_db";
+export const STORAGE_STATS_UUID : string      = "contentfly_stats_uid";
 export const STORAGE_USER : string            = "contentfly_user_data";
 export const STORAGE_SCHEMA : string          = "contentfly_schema";
 export const STORAGE_SYNC_STATE : string      = "contentfly_sync_state";
