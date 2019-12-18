@@ -106,7 +106,14 @@ export class Uploader {
             //Details zu Datensatz wurden geladen
 
             objectComplete = data;
-            return this.file.readAsArrayBuffer(this.file.dataDirectory, object.entity_id);
+            const type     = data['type'];
+
+            let ext        = '';
+            if(type && type.substr(0, 5) == 'image'){
+              ext = '.jpg';
+            }
+
+            return this.file.readAsArrayBuffer(this.file.dataDirectory, object.entity_id + ext);
           }).then((res) => {
             //Datei wurde als ArryBuffer eingelesen
 

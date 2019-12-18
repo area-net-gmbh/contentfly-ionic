@@ -206,6 +206,11 @@ export class Service {
             filename = filename + '.' + typeParts[1];
           }
 
+          if(type && type.substr(0, 5) == 'image'){
+            let typeParts = type.split('/');
+            filename = filename + '.jpg';
+          }
+
           return this.file.writeFile(this.file.dataDirectory, filename, blob, {replace: true} );
         }).then(() => {
           //Blob wurde lokal gespeichert

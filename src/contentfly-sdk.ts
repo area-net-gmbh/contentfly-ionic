@@ -9,7 +9,6 @@ import {Logger} from "./helper/logger";
 import {Storage} from "@ionic/storage";
 import {Service} from "./sync/service";
 import {Message} from "./sync/message";
-import {ApiResponse} from "./api/response.interface";
 import {Observable} from "rxjs/internal/Observable";
 import {File} from "@ionic-native/file/ngx";
 
