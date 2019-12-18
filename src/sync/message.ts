@@ -2,12 +2,13 @@ import {Mode} from "./mode";
 
 export class Message{
 
-  constructor(mode : Mode, text : string, progress : number = 0, current : number = 0, all : number = 0){
-    this.mode       = mode;
-    this.text       = text;
-    this.progress   = progress;
-    this.current    = current;
-    this.all        = all;
+  constructor(mode : Mode, text : string, progress : number = 0, current : number = 0, all : number = 0, progressLabel : string = ''){
+    this.mode           = mode;
+    this.text           = text;
+    this.progressLabel  = progressLabel;
+    this.progress       = progress;
+    this.current        = current;
+    this.all            = all;
   }
 
   /**
@@ -19,6 +20,11 @@ export class Message{
    * Zusätzliche Nachricht, "Dateien werden synchronisiert"
    */
   public text : string;
+
+  /**
+   * Zusätzlicher Infotext, "synchronisiert/geprüft" für Prozentanzeige
+   */
+  public progressLabel : string;
 
   /**
    * Prozentualer Fortschritt der Synchronisierung

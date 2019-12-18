@@ -12,6 +12,7 @@ import {Service} from "./sync/service";
 import {SQLite} from "@ionic-native/sqlite/ngx";
 import {File} from "@ionic-native/file/ngx";
 import {HttpClient} from "@angular/common/http";
+import {Stats} from "./data/stats";
 
 export const API_CONFIG = new InjectionToken<string>('ApiConfig');
 
@@ -34,6 +35,7 @@ export class ContentflyModule {
               {provide: API_CONFIG, useValue: config},
               ContentflySdk,
               Api,
+              Stats,
               HttpClient,
               Store,
               SyncState,
