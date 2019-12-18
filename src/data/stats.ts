@@ -2,7 +2,7 @@ import {Injectable} from "@angular/core";
 
 import {Api, STORAGE_STATS_UUID} from "..";
 import {Logger} from "../helper/logger";
-import {Platform} from "ionic-angular";
+import { Platform } from '@ionic/angular';
 import {Storage} from "@ionic/storage";
 import uuid  from 'uuid/v1';
 
@@ -65,7 +65,7 @@ export class Stats {
       info['category'] = 'smartphone';
     }
 
-    info['version'] = this.platfrom.version().str;
+    //info['version'] = this.platfrom.version().str;
 
     return info;
   }
