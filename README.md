@@ -25,6 +25,7 @@ Für die Entwicklung von Apps auf Basis des Contentfly CMS  sind folgende Kenntn
 
 ## Release-Notes
 
+- Version 2.1 => Unterstützung Statistik-Plugin
 - Version 2.x => Ionic 4
 - Version 1.x => Ionic 3
 
