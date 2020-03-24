@@ -18,25 +18,27 @@ import {BehaviorSubject} from "rxjs/BehaviorSubject";
 import { Observable } from "rxjs/Observable";
 import {Events} from "ionic-angular";
 import {P} from "@angular/core/src/render3";
+import {DependentEntity} from "../data/dependentEntity";
 
 
 @Injectable()
 export class Service {
 
   private api : Api = null;
-  private currentDataCount : number         = 0;
-  private currentRetryFrom : number         = 0;
-  private currentRetryTo : number           = 0;
-  private dataCount : number                = 0;
-  private data : BehaviorSubject<Message>   = null;
-  private imageDownloadSize : string        = null;
-  private isSyncing : boolean               = false;
-  public syncChunkSize : number            = SYNC_CHUNK_SIZE;
+  private currentDataCount : number             = 0;
+  private currentRetryFrom : number             = 0;
+  private currentRetryTo : number               = 0;
+  private dataCount : number                    = 0;
+  private data : BehaviorSubject<Message>       = null;
+  public dependentEntities : DependentEntity[]  = [];
+  private imageDownloadSize : string            = null;
+  private isSyncing : boolean                   = false;
+  public syncChunkSize : number                 = SYNC_CHUNK_SIZE;
+  public syncUsedFilesOnly : boolean            = true;
 
   constructor(private events : Events, private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
 
   }
-
 
   private checkSyncTimeout(){
     let lastSyncToDate = this.syncState.getLastSyncStartDate();
@@ -114,21 +116,15 @@ export class Service {
     this.imageDownloadSize = sizeName;
   }
 
+
   /**
    * Startet den Synchronisations-Projekt
    * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    * @returns {Observable<Message>}
    */
   public sync(disableSyncFrom : boolean = false){
-    this.checkSyncTimeout();
 
-    if(!this.isSyncing){
-
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(disableSyncFrom);
-    }
+    this.startSync(disableSyncFrom);
 
     return this.getData();
   }
@@ -138,15 +134,8 @@ export class Service {
    * @returns {Observable<Message>}
    */
   public syncFrom(){
-    this.checkSyncTimeout();
 
-    if(!this.isSyncing){
-
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(false, true);
-    }
+    this.startSync(false, true);
 
     return this.getData();
   }
@@ -156,15 +145,8 @@ export class Service {
    * @returns {Observable<Message>}
    */
   public syncTo(){
-    this.checkSyncTimeout();
 
-    if(!this.isSyncing){
-
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(true, false);
-    }
+    this.startSync(true, false);
 
     return this.getData();
   }
@@ -174,7 +156,39 @@ export class Service {
    * @returns {Promise<any[]>}
    */
   private syncFiles() : Promise<boolean>{
-    return this.store.query("SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'", []).then((files) => {
+
+    let subqueries             = [];
+    let syncUsedFilesOnlyQuery = '';
+
+    if(this.syncUsedFilesOnly) {
+      for (let entityName in this.schema.data) {
+        if (entityName == '_hash') continue;
+
+        let entityConfig = this.schema.data[entityName];
+        let dbName = entityConfig.settings.dbname;
+        for (let propertyName in entityConfig.properties) {
+          let propertyConfig = entityConfig.properties[propertyName];
+          switch (propertyConfig.type) {
+            case 'file':
+              subqueries.push("SELECT DISTINCT " + propertyConfig.dbfield + " FROM " + dbName);
+              break;
+            case 'multifile':
+              let field = propertyConfig.mappedBy ? propertyConfig.mappedBy + '_id' : 'file_id';
+              subqueries.push("SELECT DISTINCT " + field + " FROM " + propertyConfig.foreign);
+              break;
+          }
+        }
+      }
+
+      syncUsedFilesOnlyQuery = " AND id IN(" + subqueries.join(' UNION ') + ")";
+    }
+
+    let statement = "" +
+      "SELECT id, name, hash, _hashLocal, type, size " +
+      "FROM pim_file " +
+      "WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'" + syncUsedFilesOnlyQuery;
+
+    return this.store.query(statement, []).then((files) => {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if(!files.length){
@@ -194,7 +208,6 @@ export class Service {
 
 
         let size = file['type'] && file['type'].substr(0, 5) == 'image' ? this.imageDownloadSize : null;
-
         let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
 
@@ -214,7 +227,7 @@ export class Service {
             '_hashLocal' : file['hash']
           };
 
-          return this.store.update('PIM\\File', updateData, true);
+          return this.store.update('PIM\\File', updateData, true, true);
         }).then(() => {
           //Datenbank wurde aktualisiert
           this.currentDataCount++;
@@ -261,10 +274,36 @@ export class Service {
     let params = {
       "select": "src.*",
       "from": from,
-      "innerJoin": ["src", destTableName, "dest", "src." + sourceJoinField + " = dest.id"],
       setMaxResults: this.syncChunkSize,
       setFirstResult: this.syncState.getLastChunkSize(key)
     };
+
+    let innerJoin     = [["src", destTableName, "dest", "src." + sourceJoinField + " = dest.id"]];
+
+    if(this.dependentEntities.length){
+      for(let dependentEntitiy of this.dependentEntities){
+        if(dependentEntitiy.sourceEntity == entityName){
+
+          if(!this.schema.data[dependentEntitiy.destEntity]){
+            this.logger.info('Destination-Entity for Dependency not found.', dependentEntitiy);
+            continue;
+          }
+
+          let sourcePropertyConfig = null;
+          let entityConfig         = this.schema.data[entityName];
+          if(!(sourcePropertyConfig = entityConfig.properties[dependentEntitiy.sourceProperty])){
+            this.logger.info('Source-Property for Dependency not found.', dependentEntitiy);
+            continue;
+          }
+
+          let prop = dependentEntitiy.sourceProperty + '_id';
+          innerJoin.push(['src', entityName, 'dest_org', 'dest_org.id = src.' + entityConfig.settings.dbname + '_id']);
+          innerJoin.push(['dest_org', dependentEntitiy.destEntity, 'dest_org_dep', 'dest_org_dep.id = dest_org.' + sourcePropertyConfig.dbfield]);
+        }
+      }
+    }
+
+    params['innerJoin'] = innerJoin;
 
     if(lastSyncDate){
       params['where'] = {'dest.modified > ?' : [lastSyncDate]};
@@ -315,6 +354,7 @@ export class Service {
 
         this.syncState.setLastChunkSize(key, 0);
         this.syncState.setLastSyncDate(key, this.syncState.getStartSyncDate(key));
+        this.syncState.setStartSyncDate(key, null);
         this.syncState.save();
 
         //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
@@ -342,22 +382,43 @@ export class Service {
     from[dbname] = 'src';
 
     let params : any = {
-      select: '*',
+      select: 'src.*',
       from: from,
       setMaxResults: this.syncChunkSize,
       setFirstResult: this.syncState.getLastChunkSize(entityName)
     };
 
+    if(this.dependentEntities.length){
+      for(let dependentEntitiy of this.dependentEntities){
+        if(dependentEntitiy.sourceEntity == entityName){
+
+          if(!this.schema.data[dependentEntitiy.destEntity]){
+            this.logger.info('Destination-Entity for Dependency not found.', dependentEntitiy);
+            continue;
+          }
+
+          let sourcePropertyConfig = null;
+          if(!(sourcePropertyConfig = entityConfig.properties[dependentEntitiy.sourceProperty])){
+            this.logger.info('Source-Property for Dependency not found.', dependentEntitiy);
+            continue;
+          }
+
+          let prop = dependentEntitiy.sourceProperty + '_id';
+          params['innerJoin'] = ['src', dependentEntitiy.destEntity, 'dep_dest', 'dep_dest.id = src.' + sourcePropertyConfig.dbfield];
+        }
+      }
+    }
 
     var entityConfig = this.schema.data[entityName];
     if(entityConfig['settings']['type'] == 'tree'){
       let joinTableName = entityConfig['settings']['i18n'] ? 'pim_i18n_tree' : 'pim_tree';
 
+      params['select'] += ', j.*';
       params['leftJoin'] = ['src', joinTableName, 'j',  'src.id = j.id'];
     }
 
     if(lastSyncDate){
-      params['where'] = {'modified > ?' : [lastSyncDate]};
+      params['where'] = {'src.modified > ?' : [lastSyncDate]};
     }
 
     return this.api.post('query', params).then((request) => {
@@ -405,7 +466,9 @@ export class Service {
         //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
 
         this.syncState.setLastChunkSize(entityName, 0);
+        this.logger.info('[sync.service->FINISH] ' + entityName, this.syncState.getStartSyncDate(entityName));
         this.syncState.setLastSyncDate(entityName, this.syncState.getStartSyncDate(entityName));
+        this.syncState.setStartSyncDate(entityName, null);
         this.syncState.save();
 
         //Rückgabe Promise an ->CODE_SYNCFROM_PARALLEL
@@ -422,18 +485,26 @@ export class Service {
    * @param {boolean} disableSyncFrom Deaktiviert die Synchronisierung vom Server
    */
   private startSync(disableSyncFrom : boolean = false, disableSyncTo : boolean = false){
-    this.isSyncing  = true;
+    this.checkSyncTimeout();
+
+    if(this.isSyncing) return;
+
     this.events.publish(CONTENTFLY_SYNC_START, null);
 
-    this.data = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisiereung...'));
+    this.isSyncing  = true;
+    this.data       = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisierung...'));
 
-    let promiseSchema = Object.keys(this.schema.data).length == 0 ? this.updateSchema() : Promise.resolve();
-
-    promiseSchema.then(() => {
+    this.syncState.load().then(() => {
+      this.syncState.setLastSyncStartDate();
+      this.syncState.save();
+      let promiseSchema = this.schema && Object.keys(this.schema.data).length > 0 ? Promise.resolve() : this.updateSchema();
+      return promiseSchema;
+    }).then(() => {
       return disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
     }).then(() => {
       return disableSyncFrom || disableSyncTo ? Promise.resolve() : this.startSyncFrom();
     }).then(() => {
+
       if(disableSyncFrom){
         this.logger.info('[service.startSyncTo]', 'finished');
 
@@ -459,49 +530,53 @@ export class Service {
    * @returns {Promise<void>}
    */
   private startSyncFrom(){
-    this.logger.info("[service.startSyncFrom]", "started");
-
     this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...'));
 
-    let countParams: {}           = {};
     let countLoaded : number      = 0;
+    let countParams: {}           = {};
+    let countRequest : any        = null;
     let entitiesToSync : number   = 1;
+    let params                    = {};
 
-    //Lade letzte Synchronisations-Datum zu jeder Entität
-    for (let entityName in this.schema.data) {
-      let entityConfig = this.schema.data[entityName];
+    return this.syncState.load().then(() => {
 
-      if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig['settings']['excludeFromSync']) continue;
-      if (this.syncState.getLastSyncDate(entityName)) {
-        countParams[entityName] = this.syncState.getLastSyncDate(entityName);
+      //Lade letzte Synchronisations-Datum zu jeder Entität
+      for (let entityName in this.schema.data) {
+        let entityConfig = this.schema.data[entityName];
+
+        if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig['settings']['excludeFromSync']) continue;
+        if (this.syncState.getLastSyncDate(entityName)) {
+          countParams[entityName] = this.syncState.getLastSyncDate(entityName);
+        }
+        entitiesToSync++;
+        countLoaded += this.syncState.getLastChunkSize(entityName);
       }
-      entitiesToSync++;
-      countLoaded += this.syncState.getLastChunkSize(entityName);
-    }
 
-    let startPromise  = null;
-    let params        = {};
+      let startPromise  = null;
 
-    if (Object.keys(countParams).length) {
-      params = {lastModified: countParams};
-      startPromise = this.api.post('deleted', params);
-    }else{
-      startPromise = Promise.resolve(null);
-    }
 
-    let countRequest : any   = null;
+      this.logger.info("[service.startSyncFrom]", countParams);
 
-    return startPromise.then((deletedObjectsFromPromise) => {
+      if (Object.keys(countParams).length) {
+        params = {lastModified: countParams};
+        startPromise = this.api.post('deleted', params);
+      }else{
+        startPromise = Promise.resolve(null);
+      }
+
+      return startPromise;
+    }).then((deletedObjectsFromPromise : any) => {
       //Gelöschte Objekte wurden ausgelesen, oder beim Start übersprungen
 
-      if(deletedObjectsFromPromise && deletedObjectsFromPromise['data'] && deletedObjectsFromPromise['data'].length > 0){
-        this.logger.info("[service.startSyncFrom] delete", deletedObjectsFromPromise['data'].length + ' objects');
+      if(deletedObjectsFromPromise && deletedObjectsFromPromise.data && deletedObjectsFromPromise.data.length > 0){
+        this.logger.info("[service.startSyncFrom] delete", deletedObjectsFromPromise.data.length + ' objects');
 
         this.data.next(new Message(Mode.FROM, 'Datenbank bereinigen...', 0, 0, 0));
-        return this.store.deleteObjects(deletedObjectsFromPromise['data']);
+        return this.store.deleteObjects(deletedObjectsFromPromise.data);
       }else{
-        return Promise.resolve()
+        return Promise.resolve([])
       }
+
     }).then(() => {
       //Alte Datensätze wurden gelöscht
       let entitiesSynced : number = 0;
@@ -514,7 +589,8 @@ export class Service {
           'filesCount' : 0,
           'filesSize'  : 0,
         },
-        'hash' : null
+        'hash' : null,
+        'ts': {}
       };
 
       let promises  = [];
@@ -524,13 +600,14 @@ export class Service {
 
         if (ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig['settings']['excludeFromSync']) continue;
 
-
         params['entity'] = entityName;
+
         let p = this.api.post('count', params).then((countRequest) => {
+          countRequestAll['ts'][entityName]     = countRequest['ts'];
           countRequestAll['data']['dataCount'] += countRequest['data']['dataCount'];
-          countRequestAll['hash']       = countRequest['hash'];
+          countRequestAll['hash']               = countRequest['hash'];
           entitiesSynced++;
-          this.logger.info("[service.startSyncFrom] OK", countRequest);
+
           this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...', Math.round(entitiesSynced/entitiesToSync*100), entitiesSynced, entitiesToSync, 'geprüft'));
         });
 
@@ -539,13 +616,13 @@ export class Service {
       }
 
       params['entity'] = 'PIM\\File';
+
       let p = this.api.post('count', params).then((countRequest) => {
         countRequestAll['data']['filesCount'] += countRequest['data']['filesCount'];
         countRequestAll['data']['filesSize']  += countRequest['data']['filesSize'];
         countRequestAll['hash']        = countRequest['hash'];
         entitiesSynced++;
 
-        this.logger.info("[service.startSyncFrom] OK", countRequest);
         this.data.next(new Message(Mode.FROM, 'Prüfe Änderungen auf dem Server...', Math.round(entitiesSynced/entitiesToSync*100), entitiesSynced, entitiesToSync, 'geprüft'));
       });
       promises.push(p);
@@ -629,10 +706,10 @@ export class Service {
       if(this.dataCount == 0){
 
         if(countRequest['ts']){
-          for (let index in entities) {
-            var entity      = entities[index];
-            var entityName  = entity['entityName'];
-            this.syncState.setLastSyncDate(entityName, countRequest['ts']) ;
+
+          for (let entityName in countRequest['ts']) {
+            this.syncState.setLastSyncDate(entityName, countRequest['ts'][entityName]) ;
+            this.syncState.setStartSyncDate(entityName, null);
           }
 
           this.syncState.save();
@@ -853,6 +930,7 @@ export class Service {
    * @returns {Promise<void>}
    */
   private updateSchema(){
+
     return this.api.get('schema').then((schema) => {
       this.data.next(new Message(Mode.FROM, 'Datenbank aktualisieren...'));
       this.logger.info("SYNC store.updateSchema START");

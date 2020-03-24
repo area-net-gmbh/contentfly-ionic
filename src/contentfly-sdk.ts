@@ -13,6 +13,7 @@ import {Service} from "./sync/service";
 import {Message} from "./sync/message";
 import {ApiResponse} from "./api/response.interface";
 import {Stats} from "./data/stats";
+import {DependentEntity} from "./data/dependentEntity";
 
 @Injectable()
 export class ContentflySdk {
@@ -188,6 +189,34 @@ export class ContentflySdk {
 
 
   /**
+   * Prüft die Berechtigung zum Löschen
+   * @param {string} entity
+   * @returns boolean
+   */
+  isDeletable(entity : string){
+    return this.schema.isDeletable(entity);
+  }
+
+  /**
+   * Prüft die Berechtigung zum Lesen
+   * @param {string} entity
+   * @returns boolean
+   */
+  isReadable(entity : string){
+    return this.schema.isReadable(entity);
+  }
+
+  /**
+   * Prüft die Berechtigung zum Bearbeiten
+   * @param {string} entity
+   * @returns boolean
+   */
+  isWritable(entity : string){
+    return this.schema.isWritable(entity);
+  }
+
+
+  /**
    * Rückgabe des letzten Synchronisieruns-Datum vom Server
    * @returns {string}
    */
@@ -223,11 +252,13 @@ export class ContentflySdk {
   /**
    * Logout aus dem Contentfly CMS Backend
    */
-  public logout(){
-    this.store.deleteDatabase();
+  public logout() : Promise<null>{
+
     this.user.unset();
     this.syncState.unset();
     this.schema.unset();
+
+    return this.store.deleteDatabase();
   }
 
   /**
@@ -265,7 +296,7 @@ export class ContentflySdk {
       this.api.setUser(this.user);
       this.store.setUser(this.user);
 
-      return Promise.resolve();
+      return this.syncState.load();
     });
   }
 
@@ -299,6 +330,22 @@ export class ContentflySdk {
    */
   public setChunkSize(chunkSize : number){
     this.syncService.syncChunkSize = chunkSize;
+  }
+
+  /**
+   * Array von Entitäten, deren Datensätze abhängig von einem Join geladen werden sollen
+   * @param {boolean} syncUsedFilesOnly
+   */
+  public setDependentEntities(dependentEntities : DependentEntity[]){
+    this.syncService.dependentEntities = dependentEntities;
+  }
+
+  /**
+   * Flag, um nur die benötigten/verknüoften Dateien offline zu  synchronisieren
+   * @param {boolean} syncUsedFilesOnly
+   */
+  public setSyncOnlyUsedFiles(syncUsedFilesOnly : boolean){
+    this.syncService.syncUsedFilesOnly = syncUsedFilesOnly;
   }
 
   /**

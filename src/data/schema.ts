@@ -23,6 +23,18 @@ export class Schema {
 
   }
 
+  isDeletable(entity : string){
+    return this.permissions[entity] && this.permissions[entity].deletable;
+  }
+
+  isReadable(entity : string){
+    return this.permissions[entity] && this.permissions[entity].readable;
+  }
+
+  isWritable(entity : string){
+    return this.permissions[entity] && this.permissions[entity].writable;
+  }
+
   set(schema: any){
     this.hash         = schema.data._hash;
     this.data         = schema.data;

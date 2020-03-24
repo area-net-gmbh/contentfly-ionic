@@ -25,8 +25,7 @@ export class Logger {
         }
       }
 
-      this.events.publish(CONTENTFLY_NEW_LOGMESSAGE, debugMsd);
-
+      console.log(debugMsd);
     }
   }
 
@@ -41,7 +40,6 @@ export class Logger {
         }
       }
 
-      this.events.publish(CONTENTFLY_NEW_LOGMESSAGE, debugMsd);
       console.log(debugMsd);
     }
   }

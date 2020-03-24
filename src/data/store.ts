@@ -389,14 +389,13 @@ export class Store {
   public deleteDatabase(){
     this._db  = null;
 
-    this.sqlite.deleteDatabase({
+    return this.sqlite.deleteDatabase({
       name: DB_NAME,
       location: 'default'
-    }).then(() => {
-
-    }).catch(() => {
-
-    });
+    }).catch((error) => {
+      this.logger.info('Logout-Error', error);
+      return Promise.resolve();
+    })
   }
 
   /**
@@ -949,9 +948,10 @@ export class Store {
    * @param {string} entityName
    * @param {{}} data
    * @param {boolean} disableQueueing
+   * @param {boolean} disableLogging
    * @returns {Promise<any>}
    */
-  public update(entityName : string, data : {}, disableQueueing : boolean = false){
+  public update(entityName : string, data : {}, disableQueueing : boolean = false, disableLogging : boolean = false){
 
     let entityConfig  = this.schema.data[entityName];
     let joins : any[] = [];
@@ -1046,7 +1046,7 @@ export class Store {
     }).then(() => {
       //Datensatz wurde aktualisiert
 
-      this.logger.info("[store.update] " + entityName + ": gespeichert", data);
+      if(!disableLogging) this.logger.info("[store.update] " + entityName + ": gespeichert", data);
       if(!disableQueueing){
         return this.insertQueue(entityName, data['id'], QueueType.updated, joins);
       }else{

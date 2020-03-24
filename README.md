@@ -10,18 +10,23 @@
 - **Ionic SDK**: https://github.com/area-net-gmbh/contentfly-ionic
 - **Dokumentation**: https://www.contentfly-cms.de
 
-## Einführung
+# Releases-Notes
 
-Mit der Contentfly Plattform können datengetriebene Apps für iOS und Android unter dem Einsatz des Ionic Frameworks inklusive Synchronisations-Anbindung an einen Server entwickelt werden.
+## Version 1
 
-Der Server (bzw. das Contentfly CMS) basiert dabei auf PHP und MySQL und kann auf nahezu jedem Standard-Hosting-Provider eingesetzt werden. Das SDK für Ionic unterstützt Entwickler bei der Umsetzung mobiler Apps für iOS und Android mit automatischer Datenhaltung und Synchronisation mit dem Contentfly CMS.
+### 1.2.4
 
-Für die Entwicklung von Apps auf Basis des Contentfly CMS  sind folgende Kenntnisse erforderlich:
+- Nur benötigte Dateien synchronisieren (syncUsedFilesOnly)
+- abhängige Entitäten laden (dependentEntities)
 
-- **CMS**: PHP und optimalerweise Doctrine und MySQL
-- **Ionic**: Typescript/Javascript und Kenntnisse im Ionic Framework
+### 1.2.1
 
-# Ionic SDK
+- Unterstützung Statistik-Plugin
+
+## Version 2
+
+- Ionic 4 und Capacitor
+- siehe Branch v2
 
 ## Installation
 

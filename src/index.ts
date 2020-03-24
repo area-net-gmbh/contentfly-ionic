@@ -11,6 +11,7 @@ export * from './auth/user';
 export * from './data/queuetype';
 export * from './data/schema';
 export * from './data/store';
+export * from './data/dependentEntity';
 
 export * from './helper/logger';
 

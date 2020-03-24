@@ -105,7 +105,7 @@ export class Api {
    * POST-Aufruf an die Contentfly-API
    * @param endpoint
    * @param {any} params
-   * @returns {Promise<Object>}
+   * @returns {Promise<any>}
    */
   public post(endpoint, params = null){
     return this.request('POST', 'api/' + endpoint, params);
