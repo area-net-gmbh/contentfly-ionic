@@ -31,7 +31,8 @@ export class Service {
   private data : BehaviorSubject<Message>   = null;
   private imageDownloadSize : string        = null;
   private isSyncing : boolean               = false;
-  public syncChunkSize : number            = SYNC_CHUNK_SIZE;
+  public syncChunkSize : number             = SYNC_CHUNK_SIZE;
+  public syncUsedFilesOnly : boolean        = true;
 
   constructor(private events : Events, private file : File, private logger : Logger, private schema : Schema, private store : Store, private syncState : SyncState, private uploader : Uploader) {
 
@@ -174,7 +175,39 @@ export class Service {
    * @returns {Promise<any[]>}
    */
   private syncFiles() : Promise<boolean>{
-    return this.store.query("SELECT id, name, hash, _hashLocal, type, size FROM pim_file WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'", []).then((files) => {
+
+    let subqueries             = [];
+    let syncUsedFilesOnlyQuery = '';
+
+    if(this.syncUsedFilesOnly) {
+      for (let entityName in this.schema.data) {
+        if (entityName == '_hash') continue;
+
+        let entityConfig = this.schema.data[entityName];
+        let dbName = entityConfig.settings.dbname;
+        for (let propertyName in entityConfig.properties) {
+          let propertyConfig = entityConfig.properties[propertyName];
+          switch (propertyConfig.type) {
+            case 'file':
+              subqueries.push("SELECT DISTINCT " + propertyConfig.dbfield + " FROM " + dbName);
+              break;
+            case 'multifile':
+              let field = propertyConfig.mappedBy ? propertyConfig.mappedBy + '_id' : 'file_id';
+              subqueries.push("SELECT DISTINCT " + field + " FROM " + propertyConfig.foreign);
+              break;
+          }
+        }
+      }
+
+      syncUsedFilesOnlyQuery = " AND id IN(" + subqueries.join(' UNION ') + ")";
+    }
+
+    let statement = "" +
+      "SELECT id, name, hash, _hashLocal, type, size " +
+      "FROM pim_file " +
+      "WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'" + syncUsedFilesOnlyQuery;
+
+    return this.store.query(statement, []).then((files) => {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if(!files.length){

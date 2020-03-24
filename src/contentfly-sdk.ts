@@ -302,6 +302,14 @@ export class ContentflySdk {
   }
 
   /**
+   * Flag, um nur die benötigten/verknüoften Dateien offline zu  synchronisieren
+   * @param {boolean} syncUsedFilesOnly
+   */
+  public setSyncOnlyUsedFiles(syncUsedFilesOnly : boolean){
+    this.syncService.syncUsedFilesOnly = syncUsedFilesOnly;
+  }
+
+  /**
    * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
    * @param {boolean} doDebug
    */

@@ -36,7 +36,6 @@ export class ContentflyModule {
               ContentflySdk,
               Api,
               Stats,
-              HttpClient,
               Store,
               SyncState,
               User,
