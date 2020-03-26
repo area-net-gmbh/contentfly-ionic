@@ -5,13 +5,14 @@ import {Logger} from "..";
 
 @Injectable()
 export class SyncState {
-  private data : any= {};
+  private data : any= null;
 
   constructor(private logger : Logger, private storage : Storage) {
 
   }
 
   load(){
+
     if(this.data){
       return Promise.resolve(true);
     }

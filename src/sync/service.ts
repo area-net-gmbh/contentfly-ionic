@@ -206,11 +206,11 @@ export class Service {
 
         let file = files[index];
 
-
         let size = file['type'] && file['type'].substr(0, 5) == 'image' ? this.imageDownloadSize : null;
+
         let p = this.api.file(file['id'], size).then((blob) => {
           //Binäre Datei/Blob wurde geladen
-
+          this.logger.info('[sync.service->syncFiles:load] api/file/' + file['id'], 'loaded 1 ');
           let filename : string = (file['id'] as string) + '';
           let type : string     = file['type'];
 
@@ -232,12 +232,11 @@ export class Service {
           //Datenbank wurde aktualisiert
           this.currentDataCount++;
           let progress = Math.round(this.currentDataCount / this.dataCount * 100);
-
           this.data.next(new Message(Mode.FROM, 'Dateien werden synchronisiert...', progress, this.currentDataCount, this.dataCount, 'synchronisiert'));
 
           return Promise.resolve();
         }).catch((error) => {
-          this.logger.error('[sync.service->syncFiles] api/file', error);
+          this.logger.error('[sync.service->syncFiles] api/file/' + file['id'], error);
           return Promise.resolve();
         });
 
@@ -555,7 +554,7 @@ export class Service {
       let startPromise  = null;
 
 
-      this.logger.info("[service.startSyncFrom]", countParams);
+      this.logger.info("[service.startSyncFrom]");
 
       if (Object.keys(countParams).length) {
         params = {lastModified: countParams};

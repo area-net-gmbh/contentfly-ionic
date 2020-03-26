@@ -14,6 +14,10 @@
 
 ## Version 1
 
+### 1.2.5
+
+- Beim ersten Start werden alle Daten neu synchronisiert (syncstate wird nicht geladen)
+
 ### 1.2.4
 
 - Nur benötigte Dateien synchronisieren (syncUsedFilesOnly)
