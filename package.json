@@ -1,6 +1,6 @@
 {
   "name": "contentfly-ionic",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Contentfly SDK for Ionic",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
@@ -24,11 +24,11 @@
   },
   "homepage": "https://github.com/area-net-gmbh/contentfly-ionic#readme",
   "dependencies": {
-    "@angular/common": "~8.1.2",
-    "@angular/core": "~8.1.2",
-    "@angular/forms": "~8.1.2",
-    "@angular/platform-browser": "~8.1.2",
-    "@angular/platform-browser-dynamic": "~8.1.2",
+    "@angular/common": "^8.1.2",
+    "@angular/core": "^8.1.2",
+    "@angular/forms": "^8.1.2",
+    "@angular/platform-browser": "^8.1.2",
+    "@angular/platform-browser-dynamic": "^8.1.2",
     "@angular/router": "^8.1.2",
     "@ionic-native/core": "^5.0.0",
     "@ionic-native/file": "^5.16.0",
@@ -38,19 +38,19 @@
     "@types/node": "^6.14.4",
     "cordova-sqlite-storage": "^3.4.0",
     "filehash": "^1.0.0",
-    "rxjs": "~6.5.1",
+    "rxjs": "^6.5.1",
     "uuid": "^3.2.1",
-    "zone.js": "~0.9.1"
+    "zone.js": "^0.9.1"
   },
   "devDependencies": {
     "@ionic/app-scripts": "^3.2.3",
-    "@angular/compiler": "~8.1.2",
-    "@angular/compiler-cli": "~8.1.2",
-    "@angular-devkit/architect": "~0.801.2",
-    "@angular-devkit/build-angular": "~0.801.2",
-    "@angular-devkit/core": "~8.1.2",
-    "@angular-devkit/schematics": "~8.1.2",
-    "typescript": "~3.4.3",
+    "@angular/compiler": "^8.1.2",
+    "@angular/compiler-cli": "^8.1.2",
+    "@angular-devkit/architect": "^0.801.2",
+    "@angular-devkit/build-angular": "^0.801.2",
+    "@angular-devkit/core": "^8.1.2",
+    "@angular-devkit/schematics": "^8.1.2",
+    "typescript": "^3.4.3",
     "webpack": "^4.41.2"
   },
   "cordova": {

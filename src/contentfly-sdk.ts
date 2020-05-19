@@ -270,6 +270,14 @@ export class ContentflySdk {
   }
 
   /**
+   * Zurücksetzen des Sync-Status für Neusynchronisierung
+   * @param {Promise<any>}
+   */
+  public resetSyncState(){
+    return this.syncState.unset();
+  }
+
+  /**
    * Flag, um Debugausgaben in der Konsole anzuzeigen
    * @param {boolean} enabled
    */

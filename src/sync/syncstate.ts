@@ -79,6 +79,6 @@ export class SyncState {
 
   unset(){
     this.data = {};
-    this.storage.remove(STORAGE_SYNC_STATE);
+    return this.storage.remove(STORAGE_SYNC_STATE);
   }
 }

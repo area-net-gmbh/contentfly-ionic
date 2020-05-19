@@ -14,6 +14,14 @@
 
 ## Version 2
 
+### 2.3.0
+
+- Methode zum Zurücksetzen Sync-Status und -Timesstamps
+
+### 2.2.1
+
+- Packages Angular & Co Semantic Versions angepasst
+
 ### 2.2.0
 
 - Nur benötigte Dateien synchronisieren (syncUsedFilesOnly)
