@@ -415,14 +415,21 @@ export class Store {
         let dbfield2field : {}                = {};
         let fieldsStatement : string[]        = [];
         let placeholderStatement : string[]   = [];
-
+        
+        let multijoinDeleteStatements : string[] = [];
 
         for (let propertyKey in properties) {
 
           let propertyConfig : any[] = properties[propertyKey];
           let type : string = propertyConfig['type'];
+          
           if(type == "multijoin" || type == "multifile"){
-            continue
+            let sqlDeleteMultijoin = "" + 
+                "DELETE FROM " + propertyConfig['foreign'] + " " + 
+                "WHERE " + dbName + "_id = ?";
+            multijoinDeleteStatements.push(sqlDeleteMultijoin);    
+            
+            continue;
           }
 
           let dbfield = propertyKey;
@@ -459,6 +466,10 @@ export class Store {
 
           let valueStatement: any[] = [];
 
+          for(let multijoinDeleteStatement of multijoinDeleteStatements){
+            batchStatements.push([multijoinDeleteStatement, [props.id]]);
+          }
+
           for (let field in props) {
             let rawValue = props[field];
 
@@ -466,17 +477,14 @@ export class Store {
             let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
 
             let propertyConfig = properties[fieldForConfig];
+            
+            let type: string = propertyConfig['type'];
 
             if (stmtColInt == -1 || !propertyConfig) {
               continue;
             }
 
-            let type: string = propertyConfig['type'];
-
             switch(type){
-              case 'multijoin':
-              case 'multifile':
-                break;
               case "checkbox":
               case "boolean":
                 valueStatement[stmtColInt] = this.boolVal2Int(rawValue);

@@ -14,6 +14,10 @@
 
 ## Version 2
 
+### 2.3.1 / 2.3.2
+
+- #[#10](https://github.com/area-net-gmbh/contentfly-ionic/issues/10)
+
 ### 2.3.0
 
 - Methode zum Zurücksetzen Sync-Status und -Timesstamps
