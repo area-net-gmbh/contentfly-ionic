@@ -875,7 +875,7 @@ export class Service {
             }
           }
         }
-
+    
         if (this.dataCount == 0) {
           if (countRequest["ts"]) {
             for (let index in entities) {
@@ -886,8 +886,13 @@ export class Service {
 
             this.syncState.save();
           }
-
-          return Promise.resolve([]);
+          
+          return this.syncFiles().then(() => {
+            return Promise.resolve([]);
+          }).catch((error) => {
+            return Promise.resolve([]);
+          })
+          
         }
 
         this.data.next(new Message(Mode.FROM, "Lade Änderungen vom Server..."));

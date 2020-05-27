@@ -1,6 +1,6 @@
 {
   "name": "contentfly-ionic",
-  "version": "2.3.8",
+  "version": "2.3.9",
   "description": "Contentfly SDK for Ionic",
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
