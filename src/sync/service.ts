@@ -216,7 +216,7 @@ export class Service {
       "" +
       "SELECT id, name, hash, _hashLocal, type, size " +
       "FROM pim_file " +
-      "WHERE (_hashLocal IS NULL OR hash != _hashLocal) AND type != 'link/youtube'" +
+      "WHERE (_hashLocal IS NULL OR _hashLocal = '' OR hash != _hashLocal) AND type != 'link/youtube'" +
       syncUsedFilesOnlyQuery;
 
     return this.store.query(statement, []).then((files) => {
@@ -886,7 +886,7 @@ export class Service {
 
             this.syncState.save();
           }
-          
+
           return this.syncFiles().then(() => {
             return Promise.resolve([]);
           }).catch((error) => {
@@ -902,7 +902,6 @@ export class Service {
         );
         
         //Normale Entitäten synchronisieren
-        
         var allPromises = [];
         for (let index in entities) {
           
@@ -923,7 +922,6 @@ export class Service {
         return Promise.all(allPromises);
       })
       .then(() => {
-        
         //Multijoin-Entitäten synchronisieren
         var allPromises = [];
 
@@ -933,9 +931,10 @@ export class Service {
           var key          = entity["key"];
           var entityName   = entity["entityName"];
           var isMultijoin  = entity["isMultijoin"];
-          var lastSyncDate = this.syncState.getLastSyncDate(entityName);
-
+          var lastSyncDate = this.syncState.getLastSyncDate(key);
+         
           if (isMultijoin) {
+            
             let startFromChunK = this.syncState.getLastChunkSize(key);
             
             allPromises.push(

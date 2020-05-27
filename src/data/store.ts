@@ -424,9 +424,19 @@ export class Store {
           let type : string = propertyConfig['type'];
           
           if(type == "multijoin" || type == "multifile"){
+            let mappedField = dbName.replace('_', '') + '_id';
+            
+            if(propertyConfig['mappedFrom']){
+              mappedField = propertyConfig['mappedFrom'] + '_id' ;
+            }
+
+            if(propertyConfig['dbfield']){
+              mappedField = propertyConfig['dbfield'];
+            }
+          
             let sqlDeleteMultijoin = "" + 
                 "DELETE FROM " + propertyConfig['foreign'] + " " + 
-                "WHERE " + dbName + "_id = ?";
+                "WHERE " + mappedField + " = ?";
             multijoinDeleteStatements.push(sqlDeleteMultijoin);    
             
             continue;
@@ -473,6 +483,7 @@ export class Store {
 
           for(let multijoinDeleteStatement of multijoinDeleteStatements){
             batchStatements.push([multijoinDeleteStatement, [props.id]]);
+            this.logger.info(multijoinDeleteStatement, props.id);
           }
 
           for (let field in props) {
