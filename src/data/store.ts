@@ -450,6 +450,11 @@ export class Store {
           placeholderStatement.push("?");
         }
 
+        if(dbName == 'pim_file'){
+          fieldsStatement.push('_hashLocal');
+          placeholderStatement.push('(SELECT _hashLocal FROM pim_file WHERE id = ?)');
+        }
+
         let preparedSQLStatement = "" +
           "REPLACE INTO `" + dbName + "`(" + fieldsStatement.join(",") + ") " +
           "SELECT " + placeholderStatement.join(",") + " " +
@@ -495,6 +500,11 @@ export class Store {
             }
 
           }
+
+          if(dbName == 'pim_file'){
+            valueStatement.push(props['id']);
+          }
+
           if(this.debugImportWithoutBatch){
 
             let promise = db.executeSql(preparedSQLStatement, valueStatement).catch((error) => {
