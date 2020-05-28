@@ -44,21 +44,18 @@ export class Service {
     private uploader: Uploader
   ) {}
 
-  private checkSyncTimeout() {
+  private checkSyncTimeout(){
     let lastSyncToDate = this.syncState.getLastSyncStartDate();
-    this.logger.info(
-      "[service.sync]::isSyncing (" + lastSyncToDate + ")",
-      this.isSyncing
-    );
+    this.logger.info('[service.sync]::isSyncing (' + lastSyncToDate +')', this.isSyncing);
 
-    if (lastSyncToDate) {
+    if(lastSyncToDate){
       let currDate = new Date();
-      let sec = (currDate.getTime() - lastSyncToDate) / 1000;
+      let sec = (currDate.getTime() - lastSyncToDate)/1000;
 
-      if (sec / 60 > TIMEOUT_SYNC_MINUTES) {
+      if(sec/60 > TIMEOUT_SYNC_MINUTES){
         this.isSyncing = false;
       }
-    } else {
+    }else{
       this.isSyncing = false;
     }
   }
@@ -129,14 +126,7 @@ export class Service {
    * @returns {Observable<Message>}
    */
   public sync(disableSyncFrom: boolean = false) {
-    this.checkSyncTimeout();
-
-    if (!this.isSyncing) {
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(disableSyncFrom);
-    }
+    this.startSync(disableSyncFrom);
 
     return this.getData();
   }
@@ -145,15 +135,9 @@ export class Service {
    * Startet den Synchronisations-Projekt vom Server
    * @returns {Observable<Message>}
    */
-  public syncFrom() {
-    this.checkSyncTimeout();
+  public syncFrom(){
 
-    if (!this.isSyncing) {
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(false, true);
-    }
+    this.startSync(false, true);
 
     return this.getData();
   }
@@ -162,15 +146,9 @@ export class Service {
    * Startet den Synchronisations-Projekt zum Server
    * @returns {Observable<Message>}
    */
-  public syncTo() {
-    this.checkSyncTimeout();
+  public syncTo(){
 
-    if (!this.isSyncing) {
-      this.syncState.setLastSyncStartDate();
-      this.syncState.save();
-
-      this.startSync(true, false);
-    }
+    this.startSync(true, false);
 
     return this.getData();
   }
@@ -487,7 +465,10 @@ export class Service {
       params["leftJoin"] = ["src", joinTableName, "j", "src.id = j.id"];
     }
 
+    let importAll = true;
+
     if (lastSyncDate) {
+      importAll       = false;
       params["where"] = { "modified > ?": [lastSyncDate] };
     }
 
@@ -506,7 +487,7 @@ export class Service {
 
           var promise = new Promise((resolve, reject) => {
             //Todo: Deleted Objects from Entity as Param
-            this.store.import(entityName, data).subscribe(
+            this.store.import(entityName, data, importAll).subscribe(
               () => {
                 this.currentDataCount++;
                 let progress = Math.round(
@@ -588,28 +569,24 @@ export class Service {
     disableSyncFrom: boolean = false,
     disableSyncTo: boolean = false
   ) {
-    this.isSyncing = true;
+    this.checkSyncTimeout();
+
+    if(this.isSyncing) return;
     this.events.publish(CONTENTFLY_SYNC_START, null);
 
-    this.data = new BehaviorSubject<Message>(
-      new Message(Mode.TO, "Starte Synchronisiereung...")
-    );
+    this.isSyncing  = true;
+    this.data       = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisierung...'));
 
-    let promiseSchema =
-      Object.keys(this.schema.data).length == 0
-        ? this.updateSchema()
-        : Promise.resolve();
-
-    promiseSchema
-      .then(() => {
-        return disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
-      })
-      .then(() => {
-        return disableSyncFrom || disableSyncTo
-          ? Promise.resolve()
-          : this.startSyncFrom();
-      })
-      .then(() => {
+    this.syncState.load().then(() => {
+      this.syncState.setLastSyncStartDate();
+      this.syncState.save();
+      let promiseSchema = this.schema && Object.keys(this.schema.data).length > 0 ? Promise.resolve() : this.updateSchema();
+      return promiseSchema;
+    }).then(() => {
+      return disableSyncTo ? this.startSyncFrom() : this.startSyncTo();
+    }).then(() => {
+      return disableSyncFrom || disableSyncTo ? Promise.resolve() : this.startSyncFrom();
+    }).then(() => {
         if (disableSyncFrom) {
           this.logger.info("[service.startSyncTo]", "finished");
 
@@ -665,14 +642,12 @@ export class Service {
     for (let entityName in this.schema.data) {
       let entityConfig = this.schema.data[entityName];
 
-      if (
-        ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 ||
-        entityConfig["settings"]["excludeFromSync"]
-      )
-        continue;
+      if ( ENTITIES_TO_EXCLUDE.indexOf(entityName) >= 0 || entityConfig["settings"]["excludeFromSync"]) continue;
+
       if (this.syncState.getLastSyncDate(entityName)) {
         countParams[entityName] = this.syncState.getLastSyncDate(entityName);
       }
+
       entitiesToSync++;
       countLoaded += this.syncState.getLastChunkSize(entityName);
     }
@@ -845,10 +820,8 @@ export class Service {
                   entityName: entityName,
                   entityProperty: property,
                   srcTableName: joinedTableName,
-                  srcJoinField: propertyConfig.mappedBy
-                    ? propertyConfig.mappedBy + "_id"
-                    : "file_id",
-                  destTableName: "pim_file",
+                  srcJoinField: entityConfig.settings.dbname.replace("_", "") + "_id",
+                  destTableName: entityConfig.settings.dbname,
                   isMultijoin: true,
                 });
 
@@ -875,7 +848,7 @@ export class Service {
             }
           }
         }
-    
+       
         if (this.dataCount == 0) {
           if (countRequest["ts"]) {
             for (let index in entities) {

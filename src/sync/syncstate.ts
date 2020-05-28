@@ -1,18 +1,33 @@
 import {Injectable} from "@angular/core";
 import {STORAGE_SYNC_STATE} from "../constants";
 import {Storage} from "@ionic/storage";
+import { Logger } from "../helper/logger";
 
 @Injectable()
 export class SyncState {
   private data : any= {};
 
-  constructor(private storage : Storage) {
-    this.storage.get(STORAGE_SYNC_STATE).then((syncState) => {
+  constructor(private logger : Logger, private storage : Storage) {
+
+  }
+
+  load(){
+
+    if(Object.keys(this.data).length > 0){
+      return Promise.resolve(true);
+    }
+
+    return this.storage.get(STORAGE_SYNC_STATE).then((syncState) => {
+      this.logger.info('SyncState::init', syncState);
       if(syncState != null){
         this.data = syncState;
+      }else{
+        this.data = {};
       }
-    }).catch(() => {
 
+      return Promise.resolve(true);
+    }).catch((errro) => {
+      this.logger.error('SyncState::init', errro);
     });
   }
 

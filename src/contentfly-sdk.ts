@@ -103,7 +103,6 @@ export class ContentflySdk {
     });
   }
 
-
   /**
    * Speichern eines neuen Objektes einer bestimmten Entität
    * @param {string} entityName
@@ -265,9 +264,10 @@ export class ContentflySdk {
       this.api.setUser(this.user);
       this.store.setUser(this.user);
 
-      return Promise.resolve();
+      return this.syncState.load();
     });
   }
+
 
   /**
    * Zurücksetzen des Sync-Status für Neusynchronisierung

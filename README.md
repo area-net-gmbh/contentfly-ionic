@@ -14,7 +14,7 @@
 
 ## Version 2
 
-### 2.4.0
+### 2.4.0 - 2.4.1
 
 - [#11](https://github.com/area-net-gmbh/contentfly-ionic/issues/11)
 - [#12](https://github.com/area-net-gmbh/contentfly-ionic/issues/12)

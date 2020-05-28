@@ -403,9 +403,10 @@ export class Store {
    * Importiert mehrere Datensätzte einer Entität
    * @param {string} entity
    * @param {any[]} data
+   * @param {boolean} importAll
    * @returns {Observable<any>}
    */
-  public import(entity: string, data : any[]){
+  public import(entity: string, data : any[], importAll : boolean  = false){
     let observer = new Observable(observer => {
 
       this.db().then((db) => {
@@ -417,6 +418,8 @@ export class Store {
         let placeholderStatement : string[]   = [];
         
         let multijoinDeleteStatements : string[] = [];
+
+        let batchStatements : any[] = [];
 
         for (let propertyKey in properties) {
 
@@ -433,11 +436,15 @@ export class Store {
             if(propertyConfig['dbfield']){
               mappedField = propertyConfig['dbfield'];
             }
-          
-            let sqlDeleteMultijoin = "" + 
-                "DELETE FROM " + propertyConfig['foreign'] + " " + 
-                "WHERE " + mappedField + " = ?";
-            multijoinDeleteStatements.push(sqlDeleteMultijoin);    
+            
+            let sqlDeleteMultijoin = "DELETE FROM " + propertyConfig['foreign'];
+
+            if(importAll){
+              batchStatements.push([sqlDeleteMultijoin, []]);
+            }else{
+              sqlDeleteMultijoin += " WHERE " + mappedField + " IN ";
+              multijoinDeleteStatements.push(sqlDeleteMultijoin);  
+            } 
             
             continue;
           }
@@ -473,17 +480,15 @@ export class Store {
           "  WHERE entity_id = ?" +
           ");";
 
-        let batchStatements : any[] = [];
-
         let promises = [];
+        let multijoinDeleteIds = [];
 
         for (let props of data) {
 
           let valueStatement: any[] = [];
-
-          for(let multijoinDeleteStatement of multijoinDeleteStatements){
-            batchStatements.push([multijoinDeleteStatement, [props.id]]);
-            this.logger.info(multijoinDeleteStatement, props.id);
+          
+          if(!importAll){
+            multijoinDeleteIds.push(props['id']);
           }
 
           for (let field in props) {
@@ -533,11 +538,14 @@ export class Store {
             batchStatements.push([preparedSQLStatement, valueStatement]);
             observer.next();
           }
+        }
 
-          //console.info(preparedSQLStatement);
-          //console.log(JSON.stringify(valueStatement));
-          //batchStatements.push([preparedSQLStatement, valueStatement]);
-          //observer.next();
+        if(!importAll){
+          
+          for(let multijoinDeleteStatement of multijoinDeleteStatements){
+            multijoinDeleteStatement = multijoinDeleteStatement + '(' + '?,'.repeat(multijoinDeleteIds.length-1) + '?)';
+            batchStatements.push([multijoinDeleteStatement, multijoinDeleteIds]);
+          }
         }
 
         if(this.debugImportWithoutBatch) {
@@ -578,7 +586,7 @@ export class Store {
         }
 
         let preparedSQLStatement = "REPLACE INTO `" + tableName + "`(" + fieldsStatement.join(",") + ") VALUES(" + placeholderStatement.join(",") + ")";
-
+        
         let batchStatements : any[] = [];
 
         for (let props of data) {
