@@ -19,7 +19,6 @@ import { Uploader } from "./uploader";
 
 import { BehaviorSubject } from "rxjs/internal/BehaviorSubject";
 import { Observable } from "rxjs/internal/Observable";
-import { Events } from "@ionic/angular";
 
 @Injectable()
 export class Service {
@@ -35,7 +34,6 @@ export class Service {
   public syncUsedFilesOnly: boolean = true;
 
   constructor(
-    private events: Events,
     private file: File,
     private logger: Logger,
     private schema: Schema,
@@ -259,6 +257,10 @@ export class Service {
               id: file["id"],
               _hashLocal: file["hash"],
             };
+            
+
+            //console.log("DOWNLOADED = " +JSON.stringify(file), JSON.stringify(updateData));
+
 
             return this.store.update("PIM\\File", updateData, true);
           })
@@ -572,7 +574,6 @@ export class Service {
     this.checkSyncTimeout();
 
     if(this.isSyncing) return;
-    this.events.publish(CONTENTFLY_SYNC_START, null);
 
     this.isSyncing  = true;
     this.data       = new BehaviorSubject<Message>(new Message(Mode.TO, 'Starte Synchronisierung...'));
@@ -599,7 +600,7 @@ export class Service {
               0
             )
           );
-          this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
+          
         } else {
           this.logger.info("[service.startSyncFrom]", "finished");
         }
@@ -945,7 +946,7 @@ export class Service {
               0
             )
           );
-          this.events.publish(CONTENTFLY_SYNC_SUCCESS, null);
+          
         } else {
           this.data.next(
             new Message(

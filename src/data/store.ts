@@ -420,8 +420,10 @@ export class Store {
         let multijoinDeleteStatements : string[] = [];
 
         let batchStatements : any[] = [];
-
+        
         for (let propertyKey in properties) {
+
+          if(propertyKey == '_hashLocal') continue;
 
           let propertyConfig : any[] = properties[propertyKey];
           let type : string = propertyConfig['type'];
@@ -466,8 +468,9 @@ export class Store {
           fieldsStatement.push(dbfield);
           placeholderStatement.push("?");
         }
-
+        
         if(dbName == 'pim_file'){
+
           fieldsStatement.push('_hashLocal');
           placeholderStatement.push('(SELECT _hashLocal FROM pim_file WHERE id = ?)');
         }
@@ -479,6 +482,10 @@ export class Store {
           "  SELECT id FROM queue" +
           "  WHERE entity_id = ?" +
           ");";
+
+          if(dbName == 'pim_file'){
+            console.log(preparedSQLStatement);
+          }
 
         let promises = [];
         let multijoinDeleteIds = [];
@@ -520,6 +527,8 @@ export class Store {
           if(dbName == 'pim_file'){
             valueStatement.push(props['id']);
           }
+
+          valueStatement.push(props['id']);
 
           if(this.debugImportWithoutBatch){
 
