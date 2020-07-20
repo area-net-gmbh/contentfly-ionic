@@ -12,41 +12,9 @@
 
 # Releases-Notes
 
-## Version 2
+## Version 2.5
 
-### 2.4.0 - 2.4.1
-
-- [#11](https://github.com/area-net-gmbh/contentfly-ionic/issues/11)
-- [#12](https://github.com/area-net-gmbh/contentfly-ionic/issues/12)
-
-### 2.3.1 - 2.3.7
-
-- #[#10](https://github.com/area-net-gmbh/contentfly-ionic/issues/10)
-
-### 2.3.0
-
-- Methode zum Zurücksetzen Sync-Status und -Timesstamps
-
-### 2.2.1
-
-- Packages Angular & Co Semantic Versions angepasst
-
-### 2.2.0
-
-- Nur benötigte Dateien synchronisieren (syncUsedFilesOnly)
-
-### 2.1.1
-
-- Bugfixing
-
-### 2.1.0
-
-- Unterstützung Statistik-Plugin
-
-## Version 1
-
-- Ionic 3 und Cordova
-- siehe Branch master
+- Ionic 5 und Angular 9
 
 # Ionic SDK
 
