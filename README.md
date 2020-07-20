@@ -12,11 +12,6 @@
 
 # Releases-Notes
 
-## Version 2.5
-
-- Ionic 5 und Angular 9
-
-
 ## Version 2.4
 
 ### 2.4.0 - 2.4.8
