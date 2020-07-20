@@ -128,7 +128,7 @@ export class ContentflySdk {
 
     let data = {
       'type' : 'image/jpeg',
-      'name' : currentName,
+      'name' : currentName + '.jpg',
       'hash' : 'local',
       '_hashLocal' : 'local',
       'size' : 0,
@@ -141,7 +141,7 @@ export class ContentflySdk {
       newFileId = id;
       return id;
     }).then((id) => {
-      return this.file.copyFile(correctPath, currentName, this.file.dataDirectory, id);
+      return this.file.copyFile(correctPath, currentName, this.file.dataDirectory, id + '.jpg');
     }).then((fileEntry) => {
       this.logger.info('FILE SAVED', newFileId);
       setTimeout( () => {

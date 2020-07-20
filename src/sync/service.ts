@@ -1001,6 +1001,7 @@ export class Service {
         let cleanedObjects: any[] = [];
         let deletedObjects: string[] = [];
         let lastObject: any = null;
+        let lastJoins: string = null;
         let lastIsInserted: boolean = false;
 
         this.logger.info("[service.startSyncTo] objects", objects.length);
@@ -1016,6 +1017,12 @@ export class Service {
               deletedObjects.push(lastObject.entity_id);
             }
             lastIsInserted = false;
+          }
+          
+          if(object.mode == QueueType.inserted){
+            lastJoins = object.joins;
+          }else{
+            object.joins = lastJoins;
           }
 
           lastIsInserted = lastIsInserted || object.mode == QueueType.inserted;

@@ -5,6 +5,8 @@ import {Api} from "../api/api";
 import {Logger} from "../helper/logger";
 import {File} from "@ionic-native/file/ngx";
 
+import { Capacitor } from '@capacitor/core';
+
 @Injectable()
 export class Uploader {
 
@@ -112,14 +114,23 @@ export class Uploader {
             if(type && type.substr(0, 5) == 'image'){
               ext = '.jpg';
             }
+            this.logger.info("[upload.start] read array buffer", object.entity + ':' + object.entity_id);
 
-            return this.file.readAsArrayBuffer(this.file.dataDirectory, object.entity_id + ext);
+            const webPath = Capacitor.convertFileSrc(this.file.dataDirectory + object.entity_id  + ext)
+            
+            this.logger.info("[upload.start] fetch", object.entity + ':' + object.entity_id + " = " + webPath);
+            return fetch(webPath);
+            //return this.file.readAsArrayBuffer(this.file.dataDirectory, object.entity_id + ext);
+          }).then((response) => {
+            this.logger.info("[upload.start] read array buffer", object.entity + ':' + object.entity_id);
+            return response.arrayBuffer();
           }).then((res) => {
             //Datei wurde als ArryBuffer eingelesen
 
             try {
+              this.logger.info("[upload.start] create blob ", object.entity + ':' + object.entity_id);
               let fileData = new Blob([res], {type: objectComplete.type});
-
+              this.logger.info("[upload.start] upload ", object.entity + ':' + object.entity_id);
               return api.fileUpload(object.entity_id, objectComplete.name, fileData);
             } catch (error) {
               this.logger.error('[uploader.start] create blob ', error);

@@ -12,12 +12,19 @@
 
 # Releases-Notes
 
-## Version 2
+## Version 2.5
+
+- Ionic 5 und Angular 9
+
+
+## Version 2.4
 
 ### 2.4.0 - 2.4.1
 
 - [#11](https://github.com/area-net-gmbh/contentfly-ionic/issues/11)
 - [#12](https://github.com/area-net-gmbh/contentfly-ionic/issues/12)
+
+## Version 2.3
 
 ### 2.3.1 - 2.3.7
 
