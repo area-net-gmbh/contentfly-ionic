@@ -14,6 +14,10 @@
 
 ## Version 2.5
 
+## bis 2.5.5
+- Bugfix [#16](https://github.com/area-net-gmbh/contentfly-ionic/issues/16)
+
+## bis 2.5.4
 - Ionic 5 und Angular 9
 
 # Ionic SDK
