@@ -19,10 +19,11 @@
 
 ## Version 2.4
 
-### 2.4.0 - 2.4.1
+### 2.4.0 - 2.4.8
 
 - [#11](https://github.com/area-net-gmbh/contentfly-ionic/issues/11)
 - [#12](https://github.com/area-net-gmbh/contentfly-ionic/issues/12)
+- in 2.4.8 kritischer Bugfix! [#16](https://github.com/area-net-gmbh/contentfly-ionic/issues/16)
 
 ## Version 2.3
 
