@@ -420,7 +420,7 @@ export class Store {
         let multijoinDeleteStatements : string[] = [];
 
         let batchStatements : any[] = [];
-        
+        this.logger.info("IMPORT " + entity, data);
         for (let propertyKey in properties) {
 
           if(propertyKey == '_hashLocal') continue;
@@ -482,13 +482,10 @@ export class Store {
           "  SELECT id FROM queue" +
           "  WHERE entity_id = ?" +
           ");";
-
-          if(dbName == 'pim_file'){
-            console.log(preparedSQLStatement);
-          }
-
+        
         let promises = [];
         let multijoinDeleteIds = [];
+        
 
         for (let props of data) {
 
@@ -497,7 +494,7 @@ export class Store {
           if(!importAll){
             multijoinDeleteIds.push(props['id']);
           }
-
+         
           for (let field in props) {
             let rawValue = props[field];
 
@@ -505,10 +502,14 @@ export class Store {
             let fieldForConfig = dbfield2field[field] ? dbfield2field[field] : field;
 
             let propertyConfig = properties[fieldForConfig];
-            
-            let type: string = propertyConfig['type'];
 
-            if (stmtColInt == -1 || !propertyConfig) {
+            if(!propertyConfig){
+              continue;
+            }
+
+            let type: string = propertyConfig['type'];
+            
+            if (stmtColInt == -1) {
               continue;
             }
 
@@ -529,7 +530,6 @@ export class Store {
           }
 
           valueStatement.push(props['id']);
-
           if(this.debugImportWithoutBatch){
 
             let promise = db.executeSql(preparedSQLStatement, valueStatement).catch((error) => {
@@ -548,7 +548,7 @@ export class Store {
             observer.next();
           }
         }
-
+       
         if(!importAll){
           
           for(let multijoinDeleteStatement of multijoinDeleteStatements){
@@ -561,6 +561,7 @@ export class Store {
           return Promise.all(promises);
         }else {
           return db.sqlBatch(batchStatements).catch((error) => {
+           
             this.logger.error("SYNC store.import BATCH::" + entity, error);
             return Promise.reject(error);
           })
@@ -744,8 +745,6 @@ export class Store {
         let statement = "" +
           "INSERT INTO `" + dbName + "` (" + insertFields.join(", ") + ") " +
           "VALUES (" + insertPlaceholders.join(", ") + ")";
-
-        this.logger.info(statement, params);
 
         statements.push([statement, params]);
 

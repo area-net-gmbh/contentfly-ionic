@@ -477,13 +477,14 @@ export class Service {
     return this.api
       .post("query", params)
       .then((request) => {
+        this.logger.info(JSON.stringify(params), request);
         //Datensätze seit letzter Synchronisierung wurden ermittelt
         if (!this.syncState.getStartSyncDate(entityName)) {
           this.syncState.setStartSyncDate(entityName, request["ts"]);
         }
 
         let data: any[] = request["data"] ? request["data"] : [];
-
+        this.logger.info("STARR IMPORT " + entityName, data);
         if (data.length > 0) {
           //Datensätze vorhanden und in Datenbank importieren
 
