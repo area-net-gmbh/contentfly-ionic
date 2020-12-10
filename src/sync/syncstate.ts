@@ -12,7 +12,7 @@ export class SyncState {
   }
 
   load(){
-
+    this.logger.info('SyncState::init(data) ' + Object.keys(this.data).length, this.data);
     if(Object.keys(this.data).length > 0){
       return Promise.resolve(true);
     }

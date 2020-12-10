@@ -287,7 +287,11 @@ export class Store {
 
 
     if(this.debugImportWithoutBatch) {
-      return Promise.all(promises);
+      return Promise.all(promises).then(() => {
+        return Promise.resolve();
+      }).catch((error) => {
+        return Promise.reject(error);
+      })
     }else {
       return db.sqlBatch(statements).then(() => {
         return Promise.resolve();

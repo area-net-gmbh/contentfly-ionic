@@ -58,6 +58,10 @@ export class ContentflySdk {
     return this.syncService.countFromServer();
   }
 
+  public loadPDFPreviews(){
+
+  }
+
   /**
    * Umwandlung eines Base64-Strings in einen Blob
    * @param string b64Data
@@ -339,6 +343,14 @@ export class ContentflySdk {
    */
   public setImageDownloadSize(sizeName : string){
     this.syncService.setImageDownloadSize(sizeName);
+  }
+
+  /**
+   * Lädt bei Synchronisieren von PDF-Dateien das entsprechende Vorschaubild
+   * @param {boolean} enable
+   */
+  public setLoadPDFPreviews(enable : boolean){
+    this.syncService.loadPDFPreviews = enable;
   }
 
   /**

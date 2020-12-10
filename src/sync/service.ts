@@ -32,6 +32,7 @@ export class Service {
   private isSyncing: boolean = false;
   public syncChunkSize: number = SYNC_CHUNK_SIZE;
   public syncUsedFilesOnly: boolean = true;
+  public loadPDFPreviews: boolean = false;
 
   constructor(
     private file: File,
@@ -265,6 +266,22 @@ export class Service {
             return this.store.update("PIM\\File", updateData, true);
           })
           .then(() => {
+            let type: string = file["type"];
+            if(type == 'application/pdf' && this.loadPDFPreviews){
+              return this.api.file(file["id"], 'pim_small').then((blob) => {
+                let filename: string = (file["id"] as string) + "-preview.jpg";
+                return this.file.writeFile(
+                  this.file.dataDirectory,
+                  filename ,
+                  blob,
+                  { replace: true }
+                );
+              });
+            }else{
+              return Promise.resolve();
+            }
+          })
+          .then(() => {
             //Datenbank wurde aktualisiert
             this.currentDataCount++;
             let progress = Math.round(
@@ -414,6 +431,7 @@ export class Service {
           //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
 
           this.syncState.setLastChunkSize(key, 0);
+          this.logger.info("SAVE SYNC STATE " + key, this.syncState.getStartSyncDate(key));
           this.syncState.setLastSyncDate(
             key,
             this.syncState.getStartSyncDate(key)
@@ -540,7 +558,7 @@ export class Service {
           return promise;
         } else {
           //Keine Datensätze vorhanden, Synchronisierung der Entität abschließen
-
+          this.logger.info("SAVE SYNC STATE " + entityName, this.syncState.getStartSyncDate(entityName));
           this.syncState.setLastChunkSize(entityName, 0);
           this.syncState.setLastSyncDate(
             entityName,
@@ -657,6 +675,7 @@ export class Service {
     let startPromise = null;
     let params = {};
 
+    this.logger.info("[service.startSyncFrom]", countParams);
     if (Object.keys(countParams).length) {
       params = { lastModified: countParams };
       startPromise = this.api.post("deleted", params);
@@ -670,14 +689,14 @@ export class Service {
     return startPromise
       .then((deletedObjectsFromPromise) => {
         //Gelöschte Objekte wurden ausgelesen, oder beim Start übersprungen
-
+        this.logger.info("[service.startSyncFrom::delete] DELETED");
         if (
           deletedObjectsFromPromise &&
           deletedObjectsFromPromise["data"] &&
           deletedObjectsFromPromise["data"].length > 0
         ) {
           this.logger.info(
-            "[service.startSyncFrom] delete",
+            "[service.startSyncFrom::deleted]",
             deletedObjectsFromPromise["data"].length + " objects"
           );
 
@@ -730,7 +749,7 @@ export class Service {
               countRequest["data"]["dataCount"];
             countRequestAll["hash"] = countRequest["hash"];
             entitiesSynced++;
-            this.logger.info("[service.startSyncFrom] OK", countRequest);
+            this.logger.info("[service.startSyncFrom::count] " + entityName, countRequest);
             this.data.next(
               new Message(
                 Mode.FROM,
@@ -755,7 +774,7 @@ export class Service {
           countRequestAll["hash"] = countRequest["hash"];
           entitiesSynced++;
 
-          this.logger.info("[service.startSyncFrom] OK", countRequest);
+          this.logger.info("[service.startSyncFrom::count] PIM\\File", countRequest);
           this.data.next(
             new Message(
               Mode.FROM,
@@ -851,11 +870,12 @@ export class Service {
           }
         }
        
-        if (this.dataCount == 0) {
+        if (this.dataCount == 0 && countRequest["data"]["filesCount"] == 0) {
           if (countRequest["ts"]) {
             for (let index in entities) {
               var entity = entities[index];
               var entityName = entity["entityName"];
+              this.logger.info("SAVE SYNC STATE " + entityName, countRequest["ts"]);
               this.syncState.setLastSyncDate(entityName, countRequest["ts"]);
             }
 
@@ -872,8 +892,8 @@ export class Service {
 
         this.data.next(new Message(Mode.FROM, "Lade Änderungen vom Server..."));
         this.logger.info(
-          "[service.startSyncFrom] import ",
-          this.dataCount + "objects"
+          "[service.startSyncFrom::import]",
+          this.dataCount + " objects"
         );
         
         //Normale Entitäten synchronisieren
