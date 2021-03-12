@@ -322,6 +322,14 @@ export class ContentflySdk {
   }
 
   /**
+   * Flag, um Dateien ab einer bestimmten Größe auszuschließen
+   * @param {boolean} syncMaxFileSize
+   */
+   public setSyncMaxFileSize(syncMaxFileSize : number){
+    this.syncService.syncMaxFileSize = syncMaxFileSize;
+  }
+
+  /**
    * Flag, um bei der Synchronisierug die Datensätze als einzelne Statements für Fehlermeldungen zu schreiben
    * @param {boolean} doDebug
    */

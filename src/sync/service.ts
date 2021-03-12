@@ -33,6 +33,7 @@ export class Service {
   public syncChunkSize: number = SYNC_CHUNK_SIZE;
   public syncUsedFilesOnly: boolean = true;
   public loadPDFPreviews: boolean = false;
+  public syncMaxFileSize: number = 0;
 
   constructor(
     private file: File,
@@ -159,6 +160,8 @@ export class Service {
   private syncFiles(): Promise<boolean> {
     let subqueries = [];
     let syncUsedFilesOnlyQuery = "";
+    let syncMaxFileSizeQuery   = "";
+    let params = [];
 
     if (this.syncUsedFilesOnly) {
       for (let entityName in this.schema.data) {
@@ -189,14 +192,20 @@ export class Service {
       syncUsedFilesOnlyQuery = " AND id IN(" + subqueries.join(" UNION ") + ")";
     }
 
+    if(this.syncMaxFileSize){
+      syncMaxFileSizeQuery = " AND size < ?";
+      params.push(this.syncMaxFileSize);
+    }
+
     let statement =
       "" +
       "SELECT id, name, hash, _hashLocal, type, size " +
       "FROM pim_file " +
       "WHERE (_hashLocal IS NULL OR _hashLocal = '' OR hash != _hashLocal) AND type != 'link/youtube'" +
-      syncUsedFilesOnlyQuery;
+      syncUsedFilesOnlyQuery + 
+      syncMaxFileSizeQuery;
 
-    return this.store.query(statement, []).then((files) => {
+    return this.store.query(statement, params).then((files) => {
       //Noch nicht synchronisierte Dateien wurden ermittelt
 
       if (!files.length) {
